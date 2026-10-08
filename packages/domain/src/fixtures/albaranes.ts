@@ -16,6 +16,29 @@ Nº Line Artículo Descripción Cant. enviada Peso individual (kg) Peso (kg)
 Peso total (kg) 1,9 kg
 `;
 
+/** Hoja de picking easy WMS (tareas + ItemXX + ubicación) */
+export const FIXTURE_EASYWMS_PICKING = `
+Hoja de picking
+easy WMS
+Orden de salida
+Batch:
+Batch00000000000000000002
+Orden: OUT00602/050
+Cuenta: CUSTOMER03
+Transporte:
+Destino: MEXP01
+Tareas: 6
+Tarea Número de tarea Ubicación Artículo Rpt_ShippingOrderPaperTask_Description_lbl Cantidad
+8805 5D 1 1 Item12 Chocolate cookies 1 [UN]
+8803 5I 1 1 Item02 Tomato sauce 1 [UN]
+8802 5D 4 1 Item01 Aftershave lotion 1 [UN]
+8806 2I 2 3 Item23 Spaghetti pasta 500g 1 [UN]
+8807 1I 1 2 Item24 Beans with tomato 500g 1 [UN]
+8804 4I 1 1 Item09 Washing detergent 50 loads 1 [UN]
+09/04/2020 10:31:05
+Page 1/1
+`;
+
 export const FIXTURE_PICKING_LIST = `
 Picking List
 Webshop name

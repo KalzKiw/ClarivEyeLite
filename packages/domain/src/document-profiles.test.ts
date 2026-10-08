@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { detectProfile, parseWithProfile } from "./document-profiles";
 import {
   FIXTURE_EASYWMS,
+  FIXTURE_EASYWMS_PICKING,
   FIXTURE_FASHION,
   FIXTURE_OC,
   FIXTURE_PICKING_LIST,
@@ -18,6 +19,25 @@ describe("document profiles", () => {
     expect(doc.lines.map((l) => l.reference)).toEqual(["086872", "011134", "000357"]);
     expect(doc.lines.map((l) => l.quantity)).toEqual([6, 10, 1]);
     expect(doc.lines[0].name).toMatch(/CALZADO/i);
+  });
+
+  it("hoja de picking easyWMS: OUT + 6 Items", () => {
+    expect(detectProfile(FIXTURE_EASYWMS_PICKING)).toBe("easywms");
+    const doc = parseWithProfile(FIXTURE_EASYWMS_PICKING);
+    expect(doc.documentType).toBe("pedido");
+    expect(doc.documentNumber).toMatch(/OUT00602\/050/i);
+    expect(doc.lines).toHaveLength(6);
+    expect(doc.lines.map((l) => l.reference)).toEqual([
+      "Item12",
+      "Item02",
+      "Item01",
+      "Item23",
+      "Item24",
+      "Item09",
+    ]);
+    expect(doc.lines.every((l) => l.quantity === 1)).toBe(true);
+    expect(doc.lines[0].name).toMatch(/Chocolate cookies/i);
+    expect(doc.lines[5].name).toMatch(/Washing detergent/i);
   });
 
   it("detecta picking_list y SKUs con qty", () => {

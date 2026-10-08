@@ -4,6 +4,7 @@ import {
   parseAnyDocument,
   parseColumnBundle,
   type DocumentParseResult,
+  type ProfileBand,
 } from "@clariveye-lite/domain";
 import { createWorker, type Worker } from "tesseract.js";
 import { extractPdfText, isPdfFile, renderPdfPageToCanvas } from "@/lib/pdf-text";
@@ -110,32 +111,46 @@ async function recognizeFromCanvas(
   let bestNums = "";
   let bestScore = -1;
 
+  const columnVariants: Array<ProfileBand["columns"]> =
+    profile === "easywms"
+      ? [
+          layout.columns,
+          { sku: [0.12, 0.28], desc: [0.28, 0.55], nums: [0.55, 0.72] }, // albarán DL
+          { sku: [0.3, 0.45], desc: [0.45, 0.75], nums: [0.75, 0.98] }, // hoja picking Item
+        ]
+      : [layout.columns];
+
   for (const [y0, y1] of layout.tableBands) {
-    const [sx0, sx1] = layout.columns.sku;
-    const [dx0, dx1] = layout.columns.desc;
-    const [nx0, nx1] = layout.columns.nums;
-    const skuText = await ocrCanvas(regionCanvas(full, w, h, sx0, y0, sx1, y1, 500, true), {
-      whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-/",
-      psm: "6",
-    });
-    const descText = await ocrCanvas(regionCanvas(full, w, h, dx0, y0, dx1, y1, 700, true), {
-      psm: "6",
-    });
-    const numsText = await ocrCanvas(regionCanvas(full, w, h, nx0, y0, nx1, y1, 800, true), {
-      whitelist: "0123456789.,€ ",
-      psm: "6",
-    });
-    const score =
-      (skuText.match(/\b\d{2,}\b/g) || []).length * 3 +
-      (descText.match(/[A-Za-zÁÉÍÓÚ]{3,}/gi) || []).length +
-      (numsText.match(/\d+[.,]\d{2}/g) || []).length * 2;
-    if (score > bestScore) {
-      bestScore = score;
-      bestSku = skuText;
-      bestDesc = descText;
-      bestNums = numsText;
+    for (const cols of columnVariants) {
+      const [sx0, sx1] = cols.sku;
+      const [dx0, dx1] = cols.desc;
+      const [nx0, nx1] = cols.nums;
+      const skuText = await ocrCanvas(regionCanvas(full, w, h, sx0, y0, sx1, y1, 500, true), {
+        whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-/",
+        psm: "6",
+      });
+      const descText = await ocrCanvas(regionCanvas(full, w, h, dx0, y0, dx1, y1, 700, true), {
+        psm: "6",
+      });
+      const numsText = await ocrCanvas(regionCanvas(full, w, h, nx0, y0, nx1, y1, 800, true), {
+        whitelist: "0123456789.,€ []UNun",
+        psm: "6",
+      });
+      const score =
+        (skuText.match(/\bItem\d+\b/gi) || []).length * 5 +
+        (skuText.match(/\b\d{2,}\b/g) || []).length * 3 +
+        (descText.match(/[A-Za-zÁÉÍÓÚ]{3,}/gi) || []).length +
+        (numsText.match(/\d+\s*\[\s*UN\s*\]/gi) || []).length * 3 +
+        (numsText.match(/\d+[.,]\d{2}/g) || []).length * 2;
+      if (score > bestScore) {
+        bestScore = score;
+        bestSku = skuText;
+        bestDesc = descText;
+        bestNums = numsText;
+      }
+      if (score >= 12) break;
     }
-    if (score >= 10) break;
+    if (bestScore >= 12) break;
   }
 
   onStatus?.("Interpretando…");

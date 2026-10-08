@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.2.3 — 2026-10-08
+
+### Parser easyWMS
+- **Hoja de picking**: `OUT00602/050`, artículos `Item12`…`Item09`, cantidad `1 [UN]`, tipo pedido.
+- OCR: bandas alternativas para tabla de tareas (Item + descripción + [UN]).
+
 ## 0.2.2 — 2026-10-08
 
 ### ClarivScan / PDF

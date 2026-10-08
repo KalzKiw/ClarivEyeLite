@@ -28,10 +28,12 @@ export type ProfileBand = {
 export const PROFILE_BANDS: Record<DocumentProfile, ProfileBand> = {
   easywms: {
     tableBands: [
+      [0.28, 0.88], // hoja de picking (tabla desde ~30%)
       [0.48, 0.78],
       [0.45, 0.82],
     ],
-    columns: { sku: [0.12, 0.28], desc: [0.28, 0.55], nums: [0.55, 0.72] },
+    // Artículo ItemXX centrado; albarán DL usa bandas parecidas
+    columns: { sku: [0.28, 0.42], desc: [0.42, 0.72], nums: [0.72, 0.95] },
   },
   picking_list: {
     tableBands: [
@@ -84,7 +86,13 @@ function line(reference: string, name: string | null, quantity: number, unitPric
 
 export function detectProfile(text: string): DocumentProfile {
   const t = text || "";
-  if (/easy\s*wms|orden\s+de\s+salida|cant\.?\s*enviada|pack\s*:/i.test(t)) return "easywms";
+  if (
+    /hoja\s*de\s*picking|easy\s*wms|orden\s+de\s+salida|cant\.?\s*enviada|pack\s*:|\bItem\d+\b.*\[\s*UN\s*\]|\bOUT\d+\/\d+/i.test(
+      t,
+    )
+  ) {
+    return "easywms";
+  }
   if (/picking\s*list|order\s*id|\bsku\b[\s\S]{0,40}\bqty\b/i.test(t)) return "picking_list";
   if (/\bSKU\d{5,}/i.test(t) || (/fashion\s*shop/i.test(t) && /albar[aá]n/i.test(t))) return "fashion_sku";
   if (
@@ -108,7 +116,7 @@ export function detectProfile(text: string): DocumentProfile {
 
 function detectType(text: string): DocumentType {
   if (/orden\s+de\s+compra|\bOC\s*\d/i.test(text)) return "orden_compra";
-  if (/picking\s*list/i.test(text)) return "pedido";
+  if (/hoja\s*de\s*picking|picking\s*list|tareas\s*:\s*\d+/i.test(text)) return "pedido";
   if (/albar[aá]n|orden\s+de\s+salida/i.test(text)) return "albaran";
   if (/factura/i.test(text)) return "factura";
   if (/orden\s+de\s+trabajo|\bO\.?T\.?\b/i.test(text)) return "ot";
@@ -120,8 +128,11 @@ export function extractDocumentNumberForProfile(text: string, profile: DocumentP
   const patterns: RegExp[] = [];
   if (profile === "easywms") {
     patterns.push(
+      /orden\s*:\s*(OUT[\d\/]+)/i,
+      /\b(OUT\d+\/\d+)\b/i,
       /\b(DL_[A-Z0-9]+)\b/i,
-      /orden\s+de\s+salida\s*:\s*([A-Z0-9_\-]+)/i,
+      /orden\s+de\s+salida\s*:\s*([A-Z0-9_\-\/]+)/i,
+      /batch\s*:?\s*(Batch\d+)/i,
       /pack\s*:\s*(\d+)/i,
     );
   }
@@ -153,12 +164,40 @@ export function extractDocumentNumberForProfile(text: string, profile: DocumentP
   return null;
 }
 
-/** easyWMS: 086872 CALZADO DEPORTIVO 6 … */
+/** easyWMS albarán DL + hoja de picking (ItemXX) */
 function extractEasyWms(text: string): DocumentLine[] {
   const out: DocumentLine[] = [];
+  let m: RegExpExecArray | null;
+
+  // Hoja de picking: Item12 Chocolate cookies 1 [UN]
+  const pickRe =
+    /\b(Item\d+)\s+([A-Za-z][^\n\[\]]{2,70}?)\s+(\d{1,5})\s*(?:\[\s*UN\s*\]|UN\b)/gi;
+  while ((m = pickRe.exec(text))) {
+    const name = m[2].replace(/\s+/g, " ").trim();
+    if (/ubicaci[oó]n|art[ií]culo|descripci[oó]n|rpt_/i.test(name)) continue;
+    out.push(line(m[1], name, Number(m[3]), null, 0.94));
+  }
+  if (out.length >= 2) return dedupe(out);
+
+  // Fallback OCR: ItemXX en una línea, qty [UN] cerca
+  const items = [...text.matchAll(/\b(Item\d+)\b/gi)].map((x) => x[1]);
+  const uniqItems = [...new Set(items.map((i) => i.replace(/^item/i, "Item")))];
+  if (uniqItems.length >= 2) {
+    const names = [
+      ...text.matchAll(
+        /\bItem\d+\s+([A-Za-z][A-Za-z0-9 ,.\-%]{2,50}?)(?:\s+\d+\s*\[|\s+\d+\s*$)/gim,
+      ),
+    ].map((x) => x[1].trim());
+    const qtys = [...text.matchAll(/(\d{1,4})\s*\[\s*UN\s*\]/gi)].map((x) => Number(x[1]));
+    for (let i = 0; i < uniqItems.length; i++) {
+      out.push(line(uniqItems[i], names[i] ?? null, qtys[i] ?? 1, null, names[i] ? 0.88 : 0.75));
+    }
+    if (out.length >= 2) return dedupe(out);
+  }
+
+  // Albarán clásico: 086872 CALZADO DEPORTIVO 6 …
   const re =
     /(?:^|\n)\s*(?:\d+\s+)?(\d{5,8})\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ0-9 \/\-]{2,40}?)\s+(\d{1,5})(?:\s+\d+[.,]\d+\s*kg)?/gim;
-  let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     out.push(line(m[1], m[2].trim(), Number(m[3]), null, 0.92));
   }
