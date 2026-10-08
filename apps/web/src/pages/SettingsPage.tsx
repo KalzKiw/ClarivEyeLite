@@ -1,4 +1,4 @@
-import { ChevronRight, LogOut, ScrollText, Shield, Store, Users } from "lucide-react";
+import { ChevronRight, LogOut, ScanLine, ScrollText, Shield, Store, Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
@@ -154,6 +154,22 @@ export function SettingsPage() {
           </Button>
         </form>
       </Card>
+
+      <Link
+        to="/entrenar"
+        className="flex items-center justify-between rounded-xl border border-border bg-card p-4 shadow-sm transition active:scale-[0.99]"
+      >
+        <div className="flex items-center gap-2">
+          <ScanLine size={18} className="text-primary" />
+          <div>
+            <p className="text-sm font-medium">Entrenar lector</p>
+            <p className="text-xs text-muted-foreground">
+              ¿Mismo albarán? Señala dónde está SKU, nombre y cantidad
+            </p>
+          </div>
+        </div>
+        <ChevronRight size={18} className="text-muted-foreground" />
+      </Link>
 
       <Link
         to="/equipo"

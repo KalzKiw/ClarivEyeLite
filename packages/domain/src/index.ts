@@ -1,3 +1,4 @@
+export * from "./business-doc-profile";
 export * from "./clarivscan-parser";
 export * from "./column-merge";
 export * from "./document-parser";

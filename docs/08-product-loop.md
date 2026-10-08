@@ -26,15 +26,26 @@ Todo lo demás (cuenta, equipo, plan) debe estar en **Ajustes** o flujos cortos 
 - PDF escaneado / foto → Tesseract (gris → Otsu si falla).
 - UI muestra fuente: `PDF layout` | `PDF texto` | `OCR` + **Forzar OCR**.
 
+## Entrenar lector (por negocio)
+
+Flujo `/entrenar` (también desde Ajustes / ClarivScan):
+
+1. ¿Siempre usas el mismo albarán?
+2. Sube una muestra (PDF/foto).
+3. Señala con el dedo: columna SKU → nombre → cantidad.
+4. Se guarda en `clariveye-lite.doc-profiles.{businessId}.v1`.
+5. El OCR prioriza esas bandas (`source: trained`) y cuenta ok/fail.
+
 ## Próximas ideas (alineadas a la tesis)
 
 1. **Modo solo picking** para operarios (ocultar ClarivScan / Ajustes de dueño).
-2. **Plantillas de proveedor** (Tosma, easyWMS, fashion) elegibles a mano si el auto-perfil falla.
-3. **Cola offline** de fotos: subir varias, parsear en segundo plano.
-4. **Supabase Auth** cuando salgamos de MVP local (mismo modelo businessId + roles).
-5. **PDF CEL1** como único ticket de picking en almacén (ya generado; push a impresora Bluetooth).
-6. **Lead a Suite**: banner Pro “¿Necesitas stock y facturas? ClarivEye Suite”.
-7. **Demo seed** con 1 pedido easyWMS + 1 Tosma para onboarding en 30 s.
+2. **Aprender de correcciones**: si el usuario edita refs tras el parse, reforzar `refStyle` / muestras.
+3. **Varios perfiles** por proveedor (Tosma vs easyWMS) con selector rápido.
+4. **Cola offline** de fotos: subir varias, parsear en segundo plano.
+5. **Supabase Auth** cuando salgamos de MVP local (mismo modelo businessId + roles).
+6. **PDF CEL1** + impresora Bluetooth.
+7. **Lead a Suite**: banner Pro → ClarivEye Suite.
+8. **Demo seed** con 1 picking + 1 Tosma para onboarding en 30 s.
 
 ## Criterio de “funciona”
 

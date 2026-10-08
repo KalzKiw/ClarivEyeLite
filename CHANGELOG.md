@@ -1,5 +1,13 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.1 — 2026-10-08
+
+### Entrenar lector (por negocio)
+- Wizard `/entrenar`: ¿mismo albarán? → muestra → señalar SKU / nombre / cantidad.
+- Perfiles en localStorage por `businessId`; OCR usa bandas entrenadas antes que genéricas (`source: trained`).
+- Enlace desde Ajustes y ClarivScan.
+- Skill agente: `.cursor/skills/clariveye-lite/` + agent `parser-fixer`.
+
 ## 0.3.0 — 2026-10-08
 
 ### Cuenta y negocio (pasos, no muro de campos)

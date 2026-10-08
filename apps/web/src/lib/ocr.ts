@@ -1,16 +1,19 @@
 import {
   PROFILE_BANDS,
+  businessProfileToBands,
   detectProfile,
   parseAnyDocument,
   parseColumnBundle,
   scoreLayoutText,
   type DocumentParseResult,
+  type DocumentProfile,
   type ProfileBand,
 } from "@clariveye-lite/domain";
 import { createWorker, PSM, type Worker } from "tesseract.js";
+import { getActiveDocProfile, recordProfileOutcome } from "@/lib/doc-profiles-store";
 import { extractPdfLayout, isPdfFile, renderPdfPageToCanvas } from "@/lib/pdf-text";
 
-export type RecognizeSource = "pdf-text" | "pdf-layout" | "ocr";
+export type RecognizeSource = "pdf-text" | "pdf-layout" | "ocr" | "trained";
 
 export type RecognizeResult = DocumentParseResult & {
   source: RecognizeSource;
@@ -145,20 +148,22 @@ async function scanColumns(
   full: HTMLCanvasElement,
   headerText: string,
   fullText: string,
-  profile: ReturnType<typeof detectProfile>,
+  profile: DocumentProfile,
   mode: "gray" | "otsu",
   onStatus?: (msg: string) => void,
+  trainedBand?: ProfileBand | null,
 ): Promise<RecognizeResult> {
   const w = full.width;
   const h = full.height;
-  const layout = PROFILE_BANDS[profile];
-  onStatus?.(`Perfil ${profile} · ${mode}…`);
+  const layout = trainedBand ?? PROFILE_BANDS[profile];
+  onStatus?.(trainedBand ? `Perfil entrenado · ${mode}…` : `Perfil ${profile} · ${mode}…`);
 
   let best: DocumentParseResult | null = null;
   let bestScore = -1;
 
-  const columnVariants: Array<ProfileBand["columns"]> =
-    profile === "easywms" || profile === "tosma_cod"
+  const columnVariants: Array<ProfileBand["columns"]> = trainedBand
+    ? [trainedBand.columns]
+    : profile === "easywms" || profile === "tosma_cod"
       ? [
           layout.columns,
           { sku: [0.12, 0.28], desc: [0.28, 0.55], nums: [0.55, 0.72] },
@@ -203,7 +208,10 @@ async function scanColumns(
 
   const fallback = parseFromText(`${headerText}\n${fullText}`);
   const chosen = best && bestScore >= scoreDoc(fallback) ? best : fallback;
-  return withSource({ ...chosen, profile: chosen.profile || profile }, "ocr");
+  return withSource(
+    { ...chosen, profile: chosen.profile || profile },
+    trainedBand ? "trained" : "ocr",
+  );
 }
 
 async function recognizeFromCanvas(
@@ -213,23 +221,60 @@ async function recognizeFromCanvas(
   const w = full.width;
   const h = full.height;
 
+  const trained = getActiveDocProfile();
+  const trainedBand = trained ? businessProfileToBands(trained) : null;
+
   onStatus?.("OCR cabecera…");
-  const headerText = await ocrCanvas(regionCanvas(full, w, h, 0.3, 0, 1, 0.22, 700, "gray"), {
-    psm: "6",
-  });
+  const headerRect = trained?.regions.header;
+  const headerText = await ocrCanvas(
+    regionCanvas(
+      full,
+      w,
+      h,
+      headerRect?.x0 ?? 0.3,
+      headerRect?.y0 ?? 0,
+      headerRect?.x1 ?? 1,
+      headerRect?.y1 ?? 0.22,
+      700,
+      "gray",
+    ),
+    { psm: "6" },
+  );
 
   onStatus?.("OCR página…");
   const fullText = await ocrCanvas(full, { psm: "6" });
-  const profile = detectProfile(`${headerText}\n${fullText}`);
+  const detected = detectProfile(`${headerText}\n${fullText}`);
+  const profile: DocumentProfile = trained?.hints.baseProfile || detected;
 
-  // 1) Gris (no destruye trazos finos)
-  let best = await scanColumns(full, headerText, fullText, profile, "gray", onStatus);
+  // 1) Si hay perfil entrenado, probarlo primero
+  let best: RecognizeResult | null = null;
+  if (trainedBand) {
+    onStatus?.(`Usando perfil: ${trained!.name}…`);
+    best = await scanColumns(full, headerText, fullText, profile, "gray", onStatus, trainedBand);
+    if (scoreDoc(best) < 2) {
+      const otsuTrained = await scanColumns(
+        full,
+        headerText,
+        fullText,
+        profile,
+        "otsu",
+        onStatus,
+        trainedBand,
+      );
+      if (scoreDoc(otsuTrained) > scoreDoc(best)) best = otsuTrained;
+    }
+    recordProfileOutcome(trained!.id, scoreDoc(best) >= 2);
+  }
 
-  // 2) Si falla, Otsu solo una pasada más
-  if (scoreDoc(best) < 2) {
-    onStatus?.("OCR reintento Otsu…");
-    const otsuTry = await scanColumns(full, headerText, fullText, profile, "otsu", onStatus);
-    if (scoreDoc(otsuTry) > scoreDoc(best)) best = otsuTry;
+  // 2) Layout genérico si no hay entrenado o falló
+  if (!best || scoreDoc(best) < 2) {
+    let generic = await scanColumns(full, headerText, fullText, detected, "gray", onStatus);
+    if (scoreDoc(generic) < 2) {
+      onStatus?.("OCR reintento Otsu…");
+      const otsuTry = await scanColumns(full, headerText, fullText, detected, "otsu", onStatus);
+      if (scoreDoc(otsuTry) > scoreDoc(generic)) generic = otsuTry;
+    }
+    if (!best || scoreDoc(generic) > scoreDoc(best)) best = generic;
   }
 
   return best;

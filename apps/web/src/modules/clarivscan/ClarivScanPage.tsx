@@ -1,9 +1,10 @@
 import { canCreateOrder } from "@clariveye-lite/domain";
 import { Camera, FileUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
+import { getActiveDocProfile } from "@/lib/doc-profiles-store";
 import { recognizeDocumentStructured, type RecognizeSource } from "@/lib/ocr";
 import { createOrderFromLines, loadOrders, loadPlan, saveOrders } from "@/lib/store";
 
@@ -19,6 +20,7 @@ const SOURCE_LABEL: Record<RecognizeSource, string> = {
   "pdf-layout": "PDF layout",
   "pdf-text": "PDF texto",
   ocr: "OCR",
+  trained: "Perfil entrenado",
 };
 
 /** Solo EAN/UPC típicos van a barcode; refs cortas (78958) no — evita choques en picking */
@@ -28,6 +30,7 @@ function barcodeFromRef(ref: string): string {
 
 export function ClarivScanPage() {
   const navigate = useNavigate();
+  const trainedProfile = getActiveDocProfile();
   const [docNumber, setDocNumber] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -57,7 +60,7 @@ export function ClarivScanPage() {
 
       if (parsed.lines.length === 0) {
         setError(
-          "No pude interpretar productos. Prueba «Forzar OCR» o añade a mano.",
+          "No pude interpretar productos. Entrena el lector (Ajustes) o fuerza OCR / añade a mano.",
         );
         setLines([]);
         return;
@@ -172,6 +175,25 @@ export function ClarivScanPage() {
           />
         </label>
       </div>
+
+      {trainedProfile ? (
+        <p className="text-xs text-muted-foreground">
+          Perfil activo:{" "}
+          <span className="font-medium text-foreground">{trainedProfile.name}</span>
+          {" · "}
+          <Link to="/entrenar" className="text-primary underline">
+            editar
+          </Link>
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          ¿Siempre el mismo albarán?{" "}
+          <Link to="/entrenar" className="text-primary underline">
+            Entrena el lector
+          </Link>{" "}
+          señalando SKU / nombre / cantidad.
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="ghost" className="flex-1 gap-2" onClick={addManual}>
