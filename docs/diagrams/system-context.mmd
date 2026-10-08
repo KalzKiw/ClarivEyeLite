@@ -1,0 +1,11 @@
+flowchart LR
+  user[Usuario] --> lite[ClarivEyeLite_App]
+  subgraph embedded [Dentro_de_Lite]
+    scan[ClarivScan_UI]
+  end
+  lite --> embedded
+  scan --> api[ClarivScan_API_opcional]
+  lite --> supa[Supabase_Lite]
+  lite --> stripe[Stripe]
+  lite --> ph[PostHog]
+  lite -->|lead| suite[ClarivEye_Suite]

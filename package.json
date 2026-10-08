@@ -1,0 +1,14 @@
+{
+  "name": "clariveye-lite",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @clariveye-lite/web",
+    "build": "npm run build --workspace @clariveye-lite/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspace @clariveye-lite/domain"
+  }
+}

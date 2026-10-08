@@ -1,0 +1,9 @@
+flowchart TD
+  lite[ClarivEyeLite] --> scanMod[Modulo_ClarivScan]
+  scanMod --> parse[Parser_OCR]
+  parse --> kanban[Kanban_activo]
+  kanban --> pick[Picking_barcode]
+  pick --> deliver[Entregar_notas]
+  deliver --> log[Log_entregados]
+  kanban -->|limite_free| paywall[Paywall_Pro]
+  lite -->|CTA| suite[ClarivEye_Suite]
