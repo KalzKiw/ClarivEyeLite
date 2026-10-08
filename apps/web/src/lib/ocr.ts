@@ -6,6 +6,7 @@ import {
   type DocumentParseResult,
 } from "@clariveye-lite/domain";
 import { createWorker, type Worker } from "tesseract.js";
+import { extractPdfText, isPdfFile, renderPdfPageToCanvas } from "@/lib/pdf-text";
 
 let workerPromise: Promise<Worker> | null = null;
 
@@ -14,10 +15,6 @@ async function getWorker(): Promise<Worker> {
     workerPromise = createWorker("spa+eng");
   }
   return workerPromise;
-}
-
-async function fileToBitmap(file: File): Promise<ImageBitmap> {
-  return createImageBitmap(file);
 }
 
 function applyThreshold(ctx: CanvasRenderingContext2D, width: number, height: number, cut = 172) {
@@ -78,40 +75,35 @@ async function ocrCanvas(
   return data.text || "";
 }
 
-/**
- * OCR todoterreno: cabecera → perfil → bandas/columnas → merge + parseAnyDocument
- */
-export async function recognizeDocumentStructured(
-  file: File,
+function scoreDoc(doc: DocumentParseResult): number {
+  return doc.lines.reduce((s, l) => s + 1 + (l.name ? 1.5 : 0) + (l.quantity > 1 ? 0.5 : 0), 0);
+}
+
+function parseFromText(text: string): DocumentParseResult {
+  const profile = detectProfile(text);
+  const doc = parseAnyDocument(text);
+  return { ...doc, profile: doc.profile || profile };
+}
+
+/** OCR sobre un canvas ya preparado (imagen o PDF rasterizado) */
+async function recognizeFromCanvas(
+  full: HTMLCanvasElement,
   onStatus?: (msg: string) => void,
 ): Promise<DocumentParseResult> {
-  onStatus?.("Preparando imagen…");
-  const bitmap = await fileToBitmap(file);
-  const full = document.createElement("canvas");
-  const scale = Math.max(bitmap.width, bitmap.height) < 1400 ? 2.2 : 1.4;
-  full.width = Math.round(bitmap.width * scale);
-  full.height = Math.round(bitmap.height * scale);
-  const fctx = full.getContext("2d", { willReadFrequently: true })!;
-  fctx.fillStyle = "#fff";
-  fctx.fillRect(0, 0, full.width, full.height);
-  fctx.drawImage(bitmap, 0, 0, full.width, full.height);
-  applyThreshold(fctx, full.width, full.height, 168);
-  bitmap.close();
-
   const w = full.width;
   const h = full.height;
 
-  onStatus?.("Leyendo cabecera…");
+  onStatus?.("OCR cabecera…");
   const headerText = await ocrCanvas(regionCanvas(full, w, h, 0.35, 0, 1, 0.24, 700, true), {
     psm: "6",
   });
 
-  onStatus?.("Página completa…");
+  onStatus?.("OCR página…");
   const fullText = await ocrCanvas(full, { psm: "6" });
   const probe = `${headerText}\n${fullText}`;
   const profile = detectProfile(probe);
   const layout = PROFILE_BANDS[profile];
-  onStatus?.(`Perfil ${profile} · leyendo tabla…`);
+  onStatus?.(`Perfil ${profile} · columnas…`);
 
   let bestSku = "";
   let bestDesc = "";
@@ -134,9 +126,9 @@ export async function recognizeDocumentStructured(
       psm: "6",
     });
     const score =
-      (skuText.match(/\b\d{3,}\b/g) || []).length * 3 +
-      (descText.match(/producto|sku|calzado|v[aá]lvula|[A-Za-zÁÉÍÓÚ]{3,}/gi) || []).length +
-      (numsText.match(/\d+[.,]?\d*/g) || []).length;
+      (skuText.match(/\b\d{2,}\b/g) || []).length * 3 +
+      (descText.match(/[A-Za-zÁÉÍÓÚ]{3,}/gi) || []).length +
+      (numsText.match(/\d+[.,]\d{2}/g) || []).length * 2;
     if (score > bestScore) {
       bestScore = score;
       bestSku = skuText;
@@ -146,7 +138,7 @@ export async function recognizeDocumentStructured(
     if (score >= 10) break;
   }
 
-  onStatus?.("Interpretando datos…");
+  onStatus?.("Interpretando…");
   const joined = `${headerText}\n${bestSku}\n${bestDesc}\n${bestNums}\n${fullText}`;
   const fromColumns = parseColumnBundle({
     headerText,
@@ -155,16 +147,53 @@ export async function recognizeDocumentStructured(
     numsText: bestNums,
     fullText: joined,
   });
-  const fromProfile = parseAnyDocument(joined);
-
-  const score = (doc: DocumentParseResult) =>
-    doc.lines.reduce(
-      (s, l) => s + 1 + (l.name ? 1 : 0) + (l.quantity > 1 ? 0.5 : 0),
-      0,
-    );
-
-  const best = score(fromProfile) >= score(fromColumns) ? fromProfile : fromColumns;
+  const fromProfile = parseFromText(joined);
+  const best = scoreDoc(fromProfile) >= scoreDoc(fromColumns) ? fromProfile : fromColumns;
   return { ...best, profile: best.profile || profile };
+}
+
+/**
+ * PDF con texto → parse directo (fiable).
+ * PDF escaneado / foto → OCR.
+ */
+export async function recognizeDocumentStructured(
+  file: File,
+  onStatus?: (msg: string) => void,
+): Promise<DocumentParseResult> {
+  if (isPdfFile(file)) {
+    onStatus?.("Leyendo PDF (texto nativo)…");
+    try {
+      const pdfText = await extractPdfText(file);
+      if (pdfText.length >= 40) {
+        const parsed = parseFromText(pdfText);
+        if (parsed.lines.length >= 1) {
+          onStatus?.(`PDF texto · ${parsed.lines.length} producto(s)`);
+          return parsed;
+        }
+      }
+      onStatus?.("PDF sin texto útil · raster + OCR…");
+      const canvas = await renderPdfPageToCanvas(file, 2.8);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+      applyThreshold(ctx, canvas.width, canvas.height, 165);
+      return recognizeFromCanvas(canvas, onStatus);
+    } catch (err) {
+      console.warn("PDF path failed, image fallback", err);
+    }
+  }
+
+  onStatus?.("Preparando imagen…");
+  const bitmap = await createImageBitmap(file);
+  const full = document.createElement("canvas");
+  const scale = Math.max(bitmap.width, bitmap.height) < 1400 ? 2.2 : 1.4;
+  full.width = Math.round(bitmap.width * scale);
+  full.height = Math.round(bitmap.height * scale);
+  const fctx = full.getContext("2d", { willReadFrequently: true })!;
+  fctx.fillStyle = "#fff";
+  fctx.fillRect(0, 0, full.width, full.height);
+  fctx.drawImage(bitmap, 0, 0, full.width, full.height);
+  applyThreshold(fctx, full.width, full.height, 168);
+  bitmap.close();
+  return recognizeFromCanvas(full, onStatus);
 }
 
 export async function recognizeDocument(file: File): Promise<string> {

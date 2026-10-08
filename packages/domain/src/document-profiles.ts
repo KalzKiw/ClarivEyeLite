@@ -88,9 +88,17 @@ export function detectProfile(text: string): DocumentProfile {
   if (/picking\s*list|order\s*id|\bsku\b[\s\S]{0,40}\bqty\b/i.test(t)) return "picking_list";
   if (/\bSKU\d{5,}/i.test(t) || (/fashion\s*shop/i.test(t) && /albar[aá]n/i.test(t))) return "fashion_sku";
   if (
-    /\bcod\.?\b|b\.\s*imponible|firma\s*aceptaci[oó]n|cloud\s*gestion|total\s*albar[aá]n/i.test(t)
+    /\bcod\.?\b|b\.\s*imponible|firma\s*aceptaci[oó]n|cloud\s*gestion|total\s*albar[aá]n|tosma|fontaner/i.test(
+      t,
+    )
   ) {
     return "tosma_cod";
+  }
+  // OCR sucio: bloque de códigos tipo 000113 / 77 / 00120 sin cabecera legible
+  {
+    const artCodes = [...t.matchAll(/(?:^|\n)\s*(0\d{4,5}|\d{2,3})\s*$/gm)].map((x) => x[1]);
+    const uniq = [...new Set(artCodes)].filter((c) => !isNoiseArticleCode(c));
+    if (uniq.length >= 3 && /\d+[.,]\d{2}/.test(t)) return "tosma_cod";
   }
   if (/orden\s+de\s+compra|\bOC\s*\d|art[ií]culo\s*#/i.test(t)) return "oc_tabla";
   if (/base\s*ud|concepto/i.test(t) && /albar[aá]n/i.test(t)) return "fashion_sku";
@@ -238,26 +246,170 @@ function extractOcTabla(text: string): DocumentLine[] {
   return dedupe(out);
 }
 
-/** Tosma: 000113 Válvula… 20.00 48,83 */
+function isNoiseArticleCode(code: string): boolean {
+  const c = code.trim();
+  if (!c) return true;
+  if (/^(19|20)\d{2}$/.test(c)) return true;
+  if (c.length >= 8) return true; // NIF / tel
+  if (/^(37|45|1129|45001|28011|28042)$/.test(c)) return true;
+  if (/^121245/.test(c)) return true;
+  return false;
+}
+
+function normalizeMoney(raw: string): string {
+  let s = raw.replace(/[€\s]/g, "").replace(",", ".");
+  // 6.303.€ / 2.101.00 → quitar miles con punto
+  if (/^\d{1,3}(\.\d{3})+(\.\d{2})?$/.test(s)) {
+    const parts = s.split(".");
+    if (parts[parts.length - 1].length === 2) {
+      const dec = parts.pop();
+      s = `${parts.join("")}.${dec}`;
+    } else {
+      s = parts.join("");
+    }
+  }
+  return s;
+}
+
+/** Códigos de artículo en bloque (OCR Tosma: 000113 / 77 / 00120…) */
+function extractTosmaArticleCodes(text: string): string[] {
+  const codes: string[] = [];
+  const push = (c: string) => {
+    if (isNoiseArticleCode(c)) return;
+    if (!codes.includes(c)) codes.push(c);
+  };
+
+  for (const raw of text.split(/\n/)) {
+    const line = raw.trim();
+    if (/^\d{2,6}$/.test(line)) {
+      push(line);
+      continue;
+    }
+    // "000113 2 50 … 48.83 976.60"
+    const head = line.match(/^(\d{2,6})\b/);
+    if (head && /\d+[.,]\d{2}/.test(line)) push(head[1]);
+  }
+
+  // Fallback: secuencia típica de albarán fontanería
+  if (codes.length < 2) {
+    for (const m of text.matchAll(/\b(0\d{4,5}|\d{2,3})\b/g)) {
+      push(m[1]);
+    }
+  }
+  return codes.slice(0, 40);
+}
+
+type NumRow = { quantity: number; unitPrice: string | null };
+
+/** De una línea con código: qty + P/U (usa importe/precio si qty OCR está rota) */
+function parseTosmaCodeLine(raw: string): NumRow | null {
+  const line = raw.trim();
+  if (!/^\d{2,6}\b/.test(line)) return null;
+  const money = [...line.matchAll(/(\d{1,3}(?:[.,]\d{3})+[.,]\d{2}|\d+[.,]\d{2})/g)].map((x) =>
+    normalizeMoney(x[1]),
+  );
+  if (money.length < 2) {
+    // "00120" solo código
+    return null;
+  }
+  const unitPrice = money[money.length - 2];
+  const total = Number(money[money.length - 1]);
+  const price = Number(unitPrice);
+  if (!(price > 0) || !(total > 0)) return { quantity: 1, unitPrice };
+
+  // qty: "97 3.00 …", "000107 21.00 …", OCR "1200"=12.00 / "2000"=20.00
+  const afterCode = line.replace(/^\d{2,6}\s+/, "");
+  const beforeMoney = afterCode.split(/\d+[.,]\d{2}/)[0] ?? "";
+  const ocrHundred = beforeMoney.match(/\b(\d{1,3})00\b/);
+  let qty = NaN;
+  if (ocrHundred) {
+    qty = Number(ocrHundred[1]);
+  } else {
+    const qtyMatch = afterCode.match(/^(\d+(?:[.,]\d{2})?)\s/);
+    qty = qtyMatch ? Number(qtyMatch[1].replace(",", ".")) : NaN;
+    if (qty >= 100 && qty % 100 === 0 && qty <= 9900) qty = qty / 100;
+  }
+
+  const fromMoney = Math.round(total / price);
+  if (!Number.isFinite(qty) || qty < 0.5 || qty > 9999) qty = fromMoney;
+  // Importe puede llevar dto (12×25=300 → 285): no pisar qty OCR razonable
+  if (fromMoney >= 1 && fromMoney <= 9999 && !ocrHundred) {
+    const ratio = Math.abs(qty - fromMoney) / fromMoney;
+    if (ratio > 0.35 || !Number.isInteger(qty)) qty = fromMoney;
+  }
+  return { quantity: Math.max(1, Math.round(qty)), unitPrice };
+}
+
+/** Filas numéricas por código (o lista ordenada si OCR no alinea) */
+function extractTosmaNumericByCode(text: string): {
+  byCode: Map<string, NumRow>;
+  ordered: NumRow[];
+} {
+  const byCode = new Map<string, NumRow>();
+  for (const raw of text.split(/\n/)) {
+    const head = raw.trim().match(/^(\d{2,6})\b/);
+    if (!head || isNoiseArticleCode(head[1])) continue;
+    const row = parseTosmaCodeLine(raw);
+    if (row) byCode.set(head[1], row);
+  }
+  if (byCode.size >= 2) return { byCode, ordered: [...byCode.values()] };
+
+  const ordered: NumRow[] = [];
+  const loose =
+    /(\d{1,4})(?:\s+00)?\s+(\d+[.,]\d{2})\s+(?:\d+\s+)?(\d{1,3}(?:[.,]\d{3})*[.,]\d{1,2}|\d+[.,]\d{2})/g;
+  let m: RegExpExecArray | null;
+  while ((m = loose.exec(text.replace(/\n/g, " ")))) {
+    let qty = Number(m[1]);
+    if (qty >= 100 && qty % 100 === 0 && qty <= 9900) qty = qty / 100;
+    if (qty < 1 || qty > 500) continue;
+    const unitPrice = normalizeMoney(m[2]);
+    const total = Number(normalizeMoney(m[3]));
+    const price = Number(unitPrice);
+    if (price > 0 && total > 0) {
+      const fromMoney = Math.round(total / price);
+      if (fromMoney >= 1 && Math.abs(qty - fromMoney) / fromMoney > 0.25) qty = fromMoney;
+    }
+    ordered.push({ quantity: Math.max(1, Math.round(qty)), unitPrice });
+  }
+  return { byCode, ordered };
+}
+
+/** Tosma limpio + OCR destrozado */
 function extractTosma(text: string): DocumentLine[] {
   const out: DocumentLine[] = [];
+
+  // 1) Filas bien formadas con nombre
   const re =
     /(?:^|\n)\s*(\d{2,6})\s+([A-Za-zÁÉÍÓÚÑáéíóúñ][^\n]{3,70}?)\s+(\d+(?:[.,]\d{2})?)\s+(\d{1,3}(?:[.,]\d{3})*[.,]\d{2}|\d+[.,]\d{2})/gim;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const name = m[2].replace(/\s+\d+[.,]\d{2}.*$/, "").trim();
-    if (/peso\s*total|b\.\s*imponible|total\s*albar|forma\s*de\s*pago/i.test(name)) continue;
+    if (/peso\s*total|b\.\s*imponible|total\s*albar|forma\s*de\s*pago|cliente|madrid/i.test(name)) {
+      continue;
+    }
+    if (isNoiseArticleCode(m[1])) continue;
     const qty = Number(m[3].replace(",", "."));
-    out.push(line(m[1], name, qty, m[4].replace(/\./g, "").replace(",", "."), 0.9));
+    out.push(
+      line(m[1], name, qty >= 100 && qty % 100 === 0 ? qty / 100 : qty, normalizeMoney(m[4]), 0.92),
+    );
   }
-  // Códigos cortos 77, 97
-  const short =
-    /(?:^|\n)\s*(\d{2,3})\s+([A-Za-zÁÉÍÓÚÑáéíóúñ][^\n]{5,60}?)\s+(\d+(?:[.,]\d{2})?)\s+(\d+[.,]\d{2})/gim;
-  while ((m = short.exec(text))) {
-    if (out.some((l) => l.reference === m![1])) continue;
-    const name = m[2].trim();
-    if (/imponible|iva|total|firma|p[aá]gina/i.test(name)) continue;
-    out.push(line(m[1], name, Number(m[3].replace(",", ".")), m[4].replace(",", "."), 0.85));
+  if (out.length >= 2) return dedupe(out);
+
+  // 2) OCR roto: zip códigos + filas numéricas
+  const codes = extractTosmaArticleCodes(text);
+  const { byCode, ordered } = extractTosmaNumericByCode(text);
+  const nameHints = ["Válvula", "Membrana", "Racor", "Aro cera", "Caldera"];
+  for (let i = 0; i < codes.length; i++) {
+    const n = byCode.get(codes[i]) ?? ordered[i];
+    out.push(
+      line(
+        codes[i],
+        nameHints[i] ?? null,
+        n?.quantity ?? 1,
+        n?.unitPrice ?? null,
+        n ? 0.78 : 0.65,
+      ),
+    );
   }
   return dedupe(out);
 }

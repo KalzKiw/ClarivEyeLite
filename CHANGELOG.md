@@ -1,5 +1,14 @@
 # Changelog — ClarivEye Lite
 
+## 0.2.2 — 2026-10-08
+
+### ClarivScan / PDF
+- **Subir PDF**: primero texto nativo con pdf.js (sin OCR). Solo si el PDF es escaneado → raster + OCR.
+- UI: dos entradas — PDF y foto.
+
+### Parser Tosma
+- OCR sucio tipo albarán fontanería: recupera `000113` / `77` / `00120` / `000107` / `97` y cantidades (incluye qty OCR `1200`→12 y dto en importe).
+
 ## 0.2.1 — 2026-10-08
 
 ### Auth / multi-tenant

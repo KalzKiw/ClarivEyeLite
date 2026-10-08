@@ -118,24 +118,44 @@ export function ClarivScanPage() {
           </p>
           <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
           <p className="text-sm text-muted-foreground">
-            Interpreta tablas · OC / albarán / factura / OT
+            PDF con texto o foto · OC / albarán / factura / OT
           </p>
         </div>
       </div>
 
-      <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center shadow-sm transition active:scale-[0.99]">
-        <Camera className="text-primary" size={28} />
-        <span className="text-sm font-medium">{busy ? status || "Leyendo…" : "Foto o imagen"}</span>
-        <span className="text-xs text-muted-foreground">Lee por columnas · revisa y confirma</span>
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          disabled={busy}
-          onChange={(event) => onFile(event.target.files?.[0] ?? null)}
-        />
-      </label>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-7 text-center shadow-sm transition active:scale-[0.99]">
+          <FileUp className="text-primary" size={28} />
+          <span className="text-sm font-medium">
+            {busy ? status || "Leyendo…" : "Subir PDF"}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Texto nativo primero · OCR solo si hace falta
+          </span>
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            disabled={busy}
+            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-7 text-center shadow-sm transition active:scale-[0.99]">
+          <Camera className="text-primary" size={28} />
+          <span className="text-sm font-medium">
+            {busy ? status || "Leyendo…" : "Foto o imagen"}
+          </span>
+          <span className="text-xs text-muted-foreground">OCR por columnas</span>
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            disabled={busy}
+            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
 
       <Button type="button" variant="ghost" className="w-full gap-2" onClick={addManual}>
         <Plus size={16} />
@@ -160,7 +180,9 @@ export function ClarivScanPage() {
       <ErrorNote message={error} />
       {rawPreview ? (
         <details className="rounded-md bg-muted p-2 text-[10px] text-muted-foreground">
-          <summary className="cursor-pointer text-xs font-medium text-foreground">Preview OCR</summary>
+          <summary className="cursor-pointer text-xs font-medium text-foreground">
+            Preview texto / OCR
+          </summary>
           <p className="mt-2 whitespace-pre-wrap">{rawPreview}</p>
         </details>
       ) : null}

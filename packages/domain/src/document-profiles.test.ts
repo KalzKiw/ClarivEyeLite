@@ -7,6 +7,7 @@ import {
   FIXTURE_PICKING_LIST,
   FIXTURE_TOSMA,
 } from "./fixtures/albaranes";
+import { FIXTURE_TOSMA_OCR_DIRTY } from "./fixtures/tosma-ocr-dirty";
 import { parseDocumentOCR } from "./document-parser";
 
 describe("document profiles", () => {
@@ -48,6 +49,17 @@ describe("document profiles", () => {
     expect(refs).toContain("000107");
     expect(refs).toContain("97");
     expect(doc.lines.find((l) => l.reference === "000113")?.quantity).toBe(20);
+  });
+
+  it("Tosma OCR sucio recupera códigos y cantidades", () => {
+    expect(detectProfile(FIXTURE_TOSMA_OCR_DIRTY)).toBe("tosma_cod");
+    const doc = parseWithProfile(FIXTURE_TOSMA_OCR_DIRTY);
+    const refs = doc.lines.map((l) => l.reference);
+    expect(refs).toEqual(expect.arrayContaining(["000113", "77", "00120", "000107", "97"]));
+    expect(doc.lines.find((l) => l.reference === "000113")?.quantity).toBe(20);
+    expect(doc.lines.find((l) => l.reference === "77")?.quantity).toBe(12);
+    expect(doc.lines.find((l) => l.reference === "000107")?.quantity).toBe(21);
+    expect(doc.lines.find((l) => l.reference === "97")?.quantity).toBe(3);
   });
 
   it("oc_tabla sigue funcionando vía parseDocumentOCR", () => {
