@@ -25,3 +25,9 @@ Vite + React + TS + Tailwind + Capacitor (Android). Supabase. Stripe. PostHog. P
 El PDF/etiqueta no embebe el pedido completo. El código (Code128 + QR) lleva `CEL1:{orderId}`.
 Al escanear, Lite resuelve el pedido por `id` en el store local (luego Supabase, ADR-004).
 Texto humano bajo el barcode = `docNumber`. Las líneas usan su `barcode` o `reference` para picking.
+
+## ADR-009 — Aislamiento multi-negocio
+Cada cuenta pertenece a un `businessId`. Pedidos y plan viven en claves
+`clariveye-lite.orders.{businessId}.v1` / `plan.{businessId}`.
+Un negocio no lee el almacén de otro en el mismo navegador.
+Auth MVP es local; producción usará Supabase Auth + RLS (ADR-004).

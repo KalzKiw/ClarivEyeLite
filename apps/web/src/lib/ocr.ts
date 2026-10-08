@@ -147,20 +147,24 @@ export async function recognizeDocumentStructured(
   }
 
   onStatus?.("Interpretando datos…");
+  const joined = `${headerText}\n${bestSku}\n${bestDesc}\n${bestNums}\n${fullText}`;
   const fromColumns = parseColumnBundle({
     headerText,
     skuText: bestSku,
     descText: bestDesc,
     numsText: bestNums,
-    fullText,
+    fullText: joined,
   });
+  const fromProfile = parseAnyDocument(joined);
 
-  // Si columnas van flojas, perfiles sobre fullText suelen bastar (fashion/easyWMS limpios)
-  const fromProfile = parseAnyDocument(`${headerText}\n${fullText}`);
-  if (fromProfile.lines.length > fromColumns.lines.length) {
-    return { ...fromProfile, profile };
-  }
-  return { ...fromColumns, profile: fromColumns.profile || profile };
+  const score = (doc: DocumentParseResult) =>
+    doc.lines.reduce(
+      (s, l) => s + 1 + (l.name ? 1 : 0) + (l.quantity > 1 ? 0.5 : 0),
+      0,
+    );
+
+  const best = score(fromProfile) >= score(fromColumns) ? fromProfile : fromColumns;
+  return { ...best, profile: best.profile || profile };
 }
 
 export async function recognizeDocument(file: File): Promise<string> {

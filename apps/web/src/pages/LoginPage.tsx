@@ -2,11 +2,14 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
 import { Button, ErrorNote, Field, TextInput } from "@/components/ui";
+import { hasAnyAccount } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 
 export function LoginPage() {
   const { user, login, register } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(() =>
+    hasAnyAccount() ? "login" : "register",
+  );
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,14 +23,18 @@ export function LoginPage() {
     setError("");
     if (mode === "login") {
       const u = login(email, password);
-      if (!u) setError("Email o contraseña incorrectos");
+      if (!u) setError("Email o contraseña incorrectos (o no tienes cuenta aún)");
       return;
     }
     if (!businessName.trim() || !name.trim() || !email.trim() || password.length < 4) {
-      setError("Rellena negocio, nombre, email y contraseña (mín. 4)");
+      setError("Rellena negocio, nombre, email y contraseña (mín. 4 caracteres)");
       return;
     }
-    register({ businessName, ownerName: name, email, password });
+    try {
+      register({ businessName, ownerName: name, email, password });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo crear la cuenta");
+    }
   }
 
   return (
@@ -37,7 +44,9 @@ export function LoginPage() {
         <div className="flex flex-col items-center gap-3 text-center">
           <ClarivBox size={64} />
           <h1 className="text-2xl font-semibold tracking-tight">ClarivEye Lite</h1>
-          <p className="text-sm text-muted-foreground">Salida de pedidos · ClarivScan dentro</p>
+          <p className="text-sm text-muted-foreground">
+            Cada negocio tiene sus pedidos aislados. Crea tu cuenta o entra.
+          </p>
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -54,36 +63,68 @@ export function LoginPage() {
               className={`rounded-md py-2 ${mode === "register" ? "bg-card font-medium shadow-sm" : "text-muted-foreground"}`}
               onClick={() => setMode("register")}
             >
-              Crear negocio
+              Crear cuenta
             </button>
           </div>
 
           {mode === "register" ? (
             <>
+              <p className="text-xs text-muted-foreground">
+                Alta de <strong>negocio + dueño</strong>. Tus datos no se mezclan con otros negocios
+                en este dispositivo.
+              </p>
               <Field label="Nombre del negocio">
-                <TextInput value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+                <TextInput
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Mi almacén S.L."
+                  required
+                />
               </Field>
               <Field label="Tu nombre">
-                <TextInput value={name} onChange={(e) => setName(e.target.value)} />
+                <TextInput
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ana"
+                  required
+                />
               </Field>
             </>
-          ) : null}
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Usa el email y contraseña con los que creaste el negocio. ¿Primera vez? Pestaña{" "}
+              <button type="button" className="text-primary underline" onClick={() => setMode("register")}>
+                Crear cuenta
+              </button>
+              .
+            </p>
+          )}
 
           <Field label="Email">
-            <TextInput type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <TextInput
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@empresa.com"
+              required
+            />
           </Field>
-          <Field label={mode === "register" ? "Contraseña" : "Contraseña / PIN"}>
+          <Field label="Contraseña">
             <TextInput
               type="password"
               autoComplete={mode === "register" ? "new-password" : "current-password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 4 caracteres"
+              required
+              minLength={4}
             />
           </Field>
 
           <ErrorNote message={error} />
           <Button type="submit" className="w-full">
-            {mode === "login" ? "Entrar" : "Crear y entrar"}
+            {mode === "login" ? "Entrar" : "Crear cuenta y entrar"}
           </Button>
         </form>
       </div>

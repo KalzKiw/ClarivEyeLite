@@ -56,4 +56,29 @@ describe("document profiles", () => {
     expect(doc.documentNumber).toMatch(/OC\s*00005/i);
     expect(doc.lines.map((l) => l.reference)).toEqual(["78958", "14455", "66888"]);
   });
+
+  it("OC ruidoso tipo columnas rotas saca 3 productos con nombre", () => {
+    const noisy = `
+ORDEN DE COMPRA
+Numero de Orden: OC 00005
+ARTICU
+CULO
+78938
+14455
+66888
+PX
+PT
+PH
+2] 10,00
+5 50,00
+1 200,00
+TOTAL 689,70
+`;
+    const doc = parseWithProfile(noisy);
+    expect(doc.profile).toBe("oc_tabla");
+    expect(doc.documentNumber).toMatch(/OC\s*00005/i);
+    expect(doc.lines.length).toBeGreaterThanOrEqual(3);
+    expect(doc.lines.map((l) => l.name).filter(Boolean).length).toBeGreaterThanOrEqual(2);
+    expect(doc.lines.some((l) => /Producto/i.test(l.name ?? ""))).toBe(true);
+  });
 });

@@ -1,28 +1,61 @@
 import type { Order, OrderLine, OrderStatus } from "@clariveye-lite/domain";
+import { currentBusinessId } from "@/lib/auth";
 
-const KEY = "clariveye-lite.orders.v1";
-const PLAN_KEY = "clariveye-lite.plan";
+const LEGACY_ORDERS = "clariveye-lite.orders.v1";
+const LEGACY_PLAN = "clariveye-lite.plan";
 
 export type Plan = "free" | "pro";
 
+function requireBusinessId(): string {
+  const id = currentBusinessId();
+  if (!id) throw new Error("Sin sesión de negocio");
+  return id;
+}
+
+function ordersKey(businessId: string) {
+  return `clariveye-lite.orders.${businessId}.v1`;
+}
+
+function planKey(businessId: string) {
+  return `clariveye-lite.plan.${businessId}`;
+}
+
+/** Migra pedidos legacy al negocio de la sesión actual (una vez). */
+function migrateLegacyOrders(businessId: string) {
+  if (localStorage.getItem(ordersKey(businessId))) return;
+  const legacy = localStorage.getItem(LEGACY_ORDERS);
+  if (!legacy) return;
+  localStorage.setItem(ordersKey(businessId), legacy);
+  const legacyPlan = localStorage.getItem(LEGACY_PLAN);
+  if (legacyPlan) localStorage.setItem(planKey(businessId), legacyPlan);
+}
+
 export function loadOrders(): Order[] {
+  const businessId = currentBusinessId();
+  if (!businessId) return [];
+  migrateLegacyOrders(businessId);
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]") as Order[];
+    return JSON.parse(localStorage.getItem(ordersKey(businessId)) ?? "[]") as Order[];
   } catch {
     return [];
   }
 }
 
 export function saveOrders(orders: Order[]) {
-  localStorage.setItem(KEY, JSON.stringify(orders));
+  const businessId = requireBusinessId();
+  localStorage.setItem(ordersKey(businessId), JSON.stringify(orders));
 }
 
 export function loadPlan(): Plan {
-  return localStorage.getItem(PLAN_KEY) === "pro" ? "pro" : "free";
+  const businessId = currentBusinessId();
+  if (!businessId) return "free";
+  migrateLegacyOrders(businessId);
+  return localStorage.getItem(planKey(businessId)) === "pro" ? "pro" : "free";
 }
 
 export function savePlan(plan: Plan) {
-  localStorage.setItem(PLAN_KEY, plan);
+  const businessId = requireBusinessId();
+  localStorage.setItem(planKey(businessId), plan);
 }
 
 export function newId() {

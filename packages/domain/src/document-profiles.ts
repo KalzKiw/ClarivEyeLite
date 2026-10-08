@@ -188,6 +188,56 @@ function extractFashionSku(text: string): DocumentLine[] {
   return dedupe(out);
 }
 
+/** Orden de compra / tabla clásica + OCR ruidoso (78958 Producto X 2 10,00) */
+function extractOcTabla(text: string): DocumentLine[] {
+  const out: DocumentLine[] = [];
+  const priced =
+    /\b(\d{4,8})\s+((?:Producto|Art[ií]culo)\s+[A-Z0-9]+|[A-Za-zÁÉÍÓÚÑ][\wÁÉÍÓÚÑáéíóúñ .\-]{1,40}?)\s+(\d{1,4})\s+(\d+[.,]\d{2})/gi;
+  let m: RegExpExecArray | null;
+  while ((m = priced.exec(text))) {
+    if (/subtotal|total|iva|orden|fecha/i.test(m[2])) continue;
+    out.push(line(m[1], m[2].trim(), Number(m[3]), m[4].replace(",", "."), 0.94));
+  }
+  if (out.length >= 2) return dedupe(out);
+
+  // OCR por columnas rotas: refs 5 dígitos + Producto X/T/H o PX/PT/PH
+  const refs = [
+    ...text.matchAll(/\b(\d{5,8})\b/g),
+  ]
+    .map((x) => x[1])
+    .filter((r) => !/^(19|20)\d{2}$/.test(r) && !/^0000/.test(r));
+  const uniqRefs: string[] = [];
+  for (const r of refs) {
+    if (!uniqRefs.includes(r) && !/OC|00005/i.test(r)) uniqRefs.push(r);
+  }
+  // Quitar nº de orden tipo 00005 si hay OC cerca
+  const cleanRefs = uniqRefs.filter((r) => r !== "00005" && r !== "10200");
+
+  let names = [...text.matchAll(/\bProducto\s+([A-Z0-9]+)\b/gi)].map((x) => `Producto ${x[1]}`);
+  if (names.length < cleanRefs.length) {
+    const shorts = [...text.matchAll(/\bP([XTHA-Z0-9])\b/g)].map((x) => `Producto ${x[1]}`);
+    if (shorts.length >= cleanRefs.length) names = shorts;
+  }
+
+  const qtys: number[] = [];
+  const qtyPrice = [...text.matchAll(/(?:^|\n|[^\d])(\d{1,3})\s*[\]|]?\s+(\d+[.,]\d{2})/g)];
+  for (const q of qtyPrice) {
+    let qty = Number(q[1]);
+    const price = Number(q[2].replace(",", "."));
+    if (qty >= 10 && price >= 100 && String(qty).startsWith("1")) qty = 1;
+    if (qty >= 1 && qty <= 999) qtys.push(qty);
+  }
+
+  const n = Math.min(cleanRefs.length, Math.max(names.length, cleanRefs.length));
+  for (let i = 0; i < Math.min(cleanRefs.length, n || cleanRefs.length); i++) {
+    if (i >= 12) break;
+    out.push(
+      line(cleanRefs[i], names[i] ?? null, qtys[i] ?? 1, null, names[i] ? 0.86 : 0.7),
+    );
+  }
+  return dedupe(out);
+}
+
 /** Tosma: 000113 Válvula… 20.00 48,83 */
 function extractTosma(text: string): DocumentLine[] {
   const out: DocumentLine[] = [];
@@ -232,9 +282,20 @@ export function extractByProfile(text: string, profile: DocumentProfile): Docume
       return extractFashionSku(text);
     case "tosma_cod":
       return extractTosma(text);
+    case "oc_tabla":
+      return extractOcTabla(text);
+    case "generic":
+      return extractOcTabla(text);
     default:
       return [];
   }
+}
+
+function scoreLines(lines: DocumentLine[]): number {
+  return lines.reduce(
+    (sum, l) => sum + l.confidence + (l.name ? 0.3 : 0) + (l.quantity > 1 ? 0.1 : 0),
+    lines.length,
+  );
 }
 
 export type ProfileParseResult = DocumentParseResult & { profile: DocumentProfile };
@@ -250,17 +311,18 @@ export function parseWithProfile(rawText: string): ProfileParseResult {
 }
 
 /**
- * Entrada principal: perfil específico → si no hay líneas, parser genérico/OC.
+ * Entrada principal: elige el mejor entre perfil y parser genérico.
  */
 export function parseAnyDocument(rawText: string): ProfileParseResult {
   const profiled = parseWithProfile(rawText);
-  if (profiled.lines.length > 0) {
-    return profiled;
-  }
   const generic = parseDocumentOCR(rawText);
+  const bestLines =
+    scoreLines(profiled.lines) >= scoreLines(generic.lines) ? profiled.lines : generic.lines;
   return {
-    ...generic,
     profile: profiled.profile,
     documentNumber: profiled.documentNumber || generic.documentNumber,
+    documentType: profiled.documentType !== "desconocido" ? profiled.documentType : generic.documentType,
+    lines: bestLines,
+    raw_text: profiled.raw_text || generic.raw_text,
   };
 }

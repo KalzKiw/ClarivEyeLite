@@ -1,5 +1,16 @@
 # Changelog — ClarivEye Lite
 
+## 0.2.1 — 2026-10-08
+
+### Auth / multi-tenant
+- Varios negocios en el mismo dispositivo; email único global.
+- Pedidos y plan aislados por `businessId` (un negocio no ve el de otro).
+- Login: pestaña **Crear cuenta** (negocio + dueño) o **Entrar**.
+
+### Parser
+- Extractor `oc_tabla` para OCR ruidoso (refs + PX/Producto + qty).
+- `parseAnyDocument` elige el mejor entre perfil y parser genérico.
+
 ## 0.2.0 — 2026-10-08
 
 ### ClarivScan / OCR

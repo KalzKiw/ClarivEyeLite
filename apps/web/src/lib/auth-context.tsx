@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return u;
       },
       register: (input) => {
-        bootstrapBusiness(input);
+        bootstrapBusiness(input); // puede lanzar si email duplicado
         refresh();
       },
       logout: () => {
