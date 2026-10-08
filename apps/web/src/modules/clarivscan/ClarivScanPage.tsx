@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
-import { recognizeDocumentStructured } from "@/lib/ocr";
+import { recognizeDocumentStructured, type RecognizeSource } from "@/lib/ocr";
 import { createOrderFromLines, loadOrders, loadPlan, saveOrders } from "@/lib/store";
 
 interface DraftLine {
@@ -14,6 +14,12 @@ interface DraftLine {
   quantity: number;
   packages: number;
 }
+
+const SOURCE_LABEL: Record<RecognizeSource, string> = {
+  "pdf-layout": "PDF layout",
+  "pdf-text": "PDF texto",
+  ocr: "OCR",
+};
 
 /** Solo EAN/UPC típicos van a barcode; refs cortas (78958) no — evita choques en picking */
 function barcodeFromRef(ref: string): string {
@@ -28,23 +34,30 @@ export function ClarivScanPage() {
   const [error, setError] = useState("");
   const [rawPreview, setRawPreview] = useState("");
   const [docType, setDocType] = useState("");
+  const [source, setSource] = useState<RecognizeSource | "">("");
+  const [lastFile, setLastFile] = useState<File | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
 
-  async function onFile(file: File | null) {
+  async function onFile(file: File | null, forceOcr = false) {
     if (!file) return;
+    setLastFile(file);
     setBusy(true);
     setError("");
     setStatus("Preparando…");
     try {
-      const parsed = await recognizeDocumentStructured(file, setStatus);
-      setRawPreview(parsed.raw_text.slice(0, 800));
+      const parsed = await recognizeDocumentStructured(file, {
+        forceOcr,
+        onStatus: setStatus,
+      });
+      setSource(parsed.source);
+      setRawPreview(parsed.raw_text.slice(0, 1200));
       const profileLabel = parsed.profile ? ` · ${parsed.profile}` : "";
       setDocType(`${parsed.documentType}${profileLabel}`);
       if (parsed.documentNumber) setDocNumber(parsed.documentNumber);
 
       if (parsed.lines.length === 0) {
         setError(
-          "No pude interpretar productos. Revisa el preview OCR o añade productos a mano.",
+          "No pude interpretar productos. Prueba «Forzar OCR» o añade a mano.",
         );
         setLines([]);
         return;
@@ -59,10 +72,13 @@ export function ClarivScanPage() {
           packages: line.packages,
         })),
       );
-      setStatus(`${parsed.lines.length} producto(s)${profileLabel}`);
+      setStatus(
+        `${parsed.lines.length} producto(s) · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo leer el documento");
       setStatus("");
+      setSource("");
     } finally {
       setBusy(false);
     }
@@ -157,10 +173,21 @@ export function ClarivScanPage() {
         </label>
       </div>
 
-      <Button type="button" variant="ghost" className="w-full gap-2" onClick={addManual}>
-        <Plus size={16} />
-        Producto manual
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="ghost" className="flex-1 gap-2" onClick={addManual}>
+          <Plus size={16} />
+          Producto manual
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="flex-1 gap-2"
+          disabled={busy || !lastFile}
+          onClick={() => onFile(lastFile, true)}
+        >
+          Forzar OCR
+        </Button>
+      </div>
 
       <Field label="Nº documento">
         <TextInput
@@ -170,10 +197,14 @@ export function ClarivScanPage() {
         />
       </Field>
 
-      {docType && !error ? (
+      {source || docType ? (
         <p className="text-xs text-muted-foreground">
-          Tipo: <span className="font-medium text-foreground">{docType}</span>
-          {status ? ` · ${status}` : ""}
+          Fuente:{" "}
+          <span className="font-medium text-foreground">
+            {source ? SOURCE_LABEL[source] : "—"}
+          </span>
+          {docType ? ` · ${docType}` : ""}
+          {status && !busy ? ` · ${status}` : ""}
         </p>
       ) : null}
 
@@ -182,6 +213,7 @@ export function ClarivScanPage() {
         <details className="rounded-md bg-muted p-2 text-[10px] text-muted-foreground">
           <summary className="cursor-pointer text-xs font-medium text-foreground">
             Preview texto / OCR
+            {source ? ` (${SOURCE_LABEL[source]})` : ""}
           </summary>
           <p className="mt-2 whitespace-pre-wrap">{rawPreview}</p>
         </details>

@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.2.4 — 2026-10-08
+
+### Lectura de documentos (visión híbrida)
+- **pdf.js con layout**: agrupa texto por coordenadas Y/X (líneas reales + columnas) antes de parsear.
+- **OCR endurecido**: gris/contraste primero; Otsu solo si falla; sin umbral fijo a ciegas.
+- UI ClarivScan: muestra fuente (`PDF layout` / `PDF texto` / `OCR`) + botón **Forzar OCR**.
+
 ## 0.2.3 — 2026-10-08
 
 ### Parser easyWMS
