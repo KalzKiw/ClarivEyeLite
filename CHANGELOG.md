@@ -1,5 +1,13 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.0 — 2026-10-08
+
+### Cuenta y negocio (pasos, no muro de campos)
+- **Crear cuenta** en 3 pasos: negocio → tú → contraseña + confirmación.
+- **Ajustes** (icono en header): renombrar negocio, plan Free/Pro, cambiar contraseña (×2), enlaces a equipo y log, logout.
+- **Equipo**: invitar operario en 3 pasos (nombre → email → PIN ×2); plan se gestiona en Ajustes.
+- Doc: [`docs/08-product-loop.md`](./docs/08-product-loop.md) — bucle del producto + ideas siguientes.
+
 ## 0.2.4 — 2026-10-08
 
 ### Lectura de documentos (visión híbrida)

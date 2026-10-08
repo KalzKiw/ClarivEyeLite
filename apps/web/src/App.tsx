@@ -5,6 +5,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { LogPage } from "@/pages/LogPage";
 import { OrdersPage } from "@/pages/OrdersPage";
 import { PickingPage } from "@/pages/PickingPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { TeamPage } from "@/pages/TeamPage";
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="picking" element={<PickingPage />} />
         <Route path="log" element={<LogPage />} />
         <Route path="equipo" element={<TeamPage />} />
+        <Route path="ajustes" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

@@ -209,3 +209,29 @@ export function removeOperario(userId: string): boolean {
 export function hasAnyAccount(): boolean {
   return loadDb().users.length > 0;
 }
+
+export function renameBusiness(name: string): Business | null {
+  const me = currentUser();
+  if (!me || me.role !== "owner") return null;
+  const trimmed = name.trim();
+  if (trimmed.length < 2) return null;
+  const db = loadDb();
+  const biz = db.businesses.find((b) => b.id === me.businessId);
+  if (!biz) return null;
+  biz.name = trimmed;
+  saveDb(db);
+  return biz;
+}
+
+export function changePassword(current: string, next: string): { ok: true } | { ok: false; error: string } {
+  const me = currentUser();
+  if (!me) return { ok: false, error: "Sin sesión" };
+  if ((me.pin ?? "") !== current) return { ok: false, error: "Contraseña actual incorrecta" };
+  if (next.length < 4) return { ok: false, error: "La nueva debe tener al menos 4 caracteres" };
+  const db = loadDb();
+  const user = db.users.find((u) => u.id === me.id);
+  if (!user) return { ok: false, error: "Usuario no encontrado" };
+  user.pin = next;
+  saveDb(db);
+  return { ok: true };
+}

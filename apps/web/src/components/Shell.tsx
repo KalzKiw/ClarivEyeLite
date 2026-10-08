@@ -1,4 +1,4 @@
-import { ClipboardList, PackageCheck, ScanLine, ScrollText, Users } from "lucide-react";
+import { ClipboardList, PackageCheck, ScanLine, Settings, Users } from "lucide-react";
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
 import { Watermark } from "@/components/Watermark";
@@ -33,10 +33,17 @@ export function Shell() {
             </div>
           </div>
           <NavLink
-            to="/log"
-            className="rounded-md px-2 py-1.5 text-xs text-primary-foreground/90 transition hover:bg-primary-foreground/10"
+            to="/ajustes"
+            className={({ isActive }) =>
+              cn(
+                "rounded-md p-2 transition hover:bg-primary-foreground/10",
+                isActive && "bg-primary-foreground/15",
+              )
+            }
+            aria-label="Ajustes"
+            title="Ajustes"
           >
-            <ScrollText className="inline h-4 w-4" /> Log
+            <Settings className="h-5 w-5" />
           </NavLink>
         </div>
       </header>

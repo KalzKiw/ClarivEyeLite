@@ -9,12 +9,14 @@ import {
 import {
   addOperario,
   bootstrapBusiness,
+  changePassword as doChangePassword,
   currentUser,
   loadBusiness,
   loadUsers,
   login as doLogin,
   logout as doLogout,
   removeOperario,
+  renameBusiness as doRenameBusiness,
   type Business,
   type LiteUser,
 } from "@/lib/auth";
@@ -34,6 +36,11 @@ type AuthCtx = {
   logout: () => void;
   inviteOperario: (input: { name: string; email: string; pin: string }) => LiteUser | null;
   kickOperario: (userId: string) => boolean;
+  renameBusiness: (name: string) => Business | null;
+  changePassword: (
+    current: string,
+    next: string,
+  ) => { ok: true } | { ok: false; error: string };
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -76,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return u;
       },
       register: (input) => {
-        bootstrapBusiness(input); // puede lanzar si email duplicado
+        bootstrapBusiness(input);
         refresh();
       },
       logout: () => {
@@ -92,6 +99,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const ok = removeOperario(userId);
         refresh();
         return ok;
+      },
+      renameBusiness: (name) => {
+        const b = doRenameBusiness(name);
+        refresh();
+        return b;
+      },
+      changePassword: (current, next) => {
+        const r = doChangePassword(current, next);
+        if (r.ok) refresh();
+        return r;
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -17,5 +17,8 @@ ClarivEye Lite **no gestiona el negocio**: cierra el agujero de la **salida** de
 
 ## Independencia
 - Carpeta y repo propios (`ClarivEyeLite/`).
-- Supabase propio.
+- Supabase propio (previsto; MVP actual = localStorage multi-tenant).
 - Reutiliza ideas y parser de ClarivScan/ClarivEye; no es un fork del monorepo Suite.
+
+## UX
+Cuenta y equipo en **pasos cortos**; configuración en **Ajustes**. El operario no debe sentir un ERP. Detalle: [08-product-loop.md](./08-product-loop.md).

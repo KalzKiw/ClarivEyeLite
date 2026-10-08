@@ -20,7 +20,13 @@ ClarivSuite/
 ```
 
 ## Docs
-[`docs/`](./docs/) — visión, ADRs, alcance, requisitos, casos de uso, datos, analytics, stack.
+[`docs/`](./docs/) — visión, ADRs, alcance, requisitos, casos de uso, datos, analytics, stack, **[bucle del producto](./docs/08-product-loop.md)**.
+
+## Flujo rápido
+1. `/login` → **Crear cuenta** (3 pasos) o Entrar.
+2. **ClarivScan** → PDF o foto → revisa líneas → crear pedido.
+3. **Picking** → escanea CEL1 / barcodes → entrega.
+4. **⚙ Ajustes** → negocio, plan, contraseña, equipo.
 
 ## Dev
 ```bash
