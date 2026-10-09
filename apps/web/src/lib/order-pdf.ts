@@ -1,5 +1,4 @@
 import type { Order, OrderLine } from "@clariveye-lite/domain";
-import { normalizeOrderLine } from "@clariveye-lite/domain";
 import {
   ORDER_STATUS_LABEL,
   encodeOrderBarcodeToken,
@@ -62,13 +61,6 @@ function lineAmount(line: OrderLine): number | null {
   const unit = parseUnitPrice(line.unitPrice);
   if (unit === null) return null;
   return unit * line.quantity;
-}
-
-function pickMark(line: OrderLine): string {
-  const n = normalizeOrderLine(line);
-  if (n.pickedQty >= n.quantity) return "[x]";
-  if (n.pickedQty > 0) return `${n.pickedQty}/${n.quantity}`;
-  return "[ ]";
 }
 
 function lastTableY(doc: jsPDF): number {
@@ -205,11 +197,11 @@ export async function downloadOrderCierrePdf(order: Order, opts?: OrderPdfOption
   doc.setTextColor(...PRIMARY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text("Lite", textLeft, y + 4);
+  doc.text("ClarivPack", textLeft, y + 4);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  doc.text("Cierre / entrega", textLeft, y + 9);
+  doc.text("Comprobante de entrega · no es hoja de picking", textLeft, y + 9);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
   doc.setTextColor(...INK);
@@ -249,27 +241,27 @@ export async function downloadOrderCierrePdf(order: Order, opts?: OrderPdfOption
   }
 
   y += 2;
-  const codeH = 38;
+  // Identificación del pedido (referencia, no para puntear productos)
+  const codeH = 28;
   doc.setDrawColor(230, 230, 235);
   doc.setLineWidth(0.25);
   doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, codeH, 1.5, 1.5, "S");
-  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 4, 118, 18);
+  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 5, 100, 14);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...MUTED);
-  doc.text(`Pedido ${order.docNumber} — barra o QR abren el picking`, MARGIN + 3, y + 28);
-  doc.text("En movil: mejor el QR", MARGIN + 3, y + 33);
-  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 36, y + 3, 32, 32);
-  y += codeH + 4;
+  doc.text(`Ref. pedido ${order.docNumber}`, MARGIN + 3, y + 24);
+  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 30, y + 2, 24, 24);
+  y += codeH + 5;
 
+  // Resumen de lo entregado — sin casillas de picking
   autoTable(doc, {
     startY: y,
-    head: [["", "#", "Ref", "Descripción", "Ud", "Bultos", "P.unit", "Importe", "Código"]],
+    head: [["#", "Ref", "Descripción", "Ud", "Bultos", "P.unit", "Importe"]],
     body: order.lines.map((line, idx) => {
       const unit = parseUnitPrice(line.unitPrice);
       const amount = lineAmount(line);
       return [
-        pickMark(line),
         String(idx + 1),
         line.reference,
         line.name || "—",
@@ -277,34 +269,24 @@ export async function downloadOrderCierrePdf(order: Order, opts?: OrderPdfOption
         String(line.packages),
         unit !== null ? fmtMoney(unit) : line.unitPrice?.trim() || "—",
         amount !== null ? fmtMoney(amount) : "—",
-        line.barcode || line.reference,
       ];
     }),
-    styles: { fontSize: 7, cellPadding: 1.1, textColor: INK, overflow: "linebreak" },
+    styles: { fontSize: 7.5, cellPadding: 1.3, textColor: INK, overflow: "linebreak" },
     headStyles: {
       fillColor: PRIMARY,
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 7,
+      fontSize: 7.5,
     },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
-      0: { cellWidth: 7, halign: "center" },
-      1: { cellWidth: 6, halign: "center" },
-      2: { cellWidth: 24 },
-      3: { cellWidth: 44 },
-      4: { cellWidth: 10, halign: "right" },
-      5: { cellWidth: 12, halign: "right" },
-      6: { cellWidth: 18, halign: "right" },
-      7: { cellWidth: 20, halign: "right" },
-      8: { cellWidth: 21 },
-    },
-    didParseCell(data) {
-      if (data.section !== "body") return;
-      const line = order.lines[data.row.index];
-      if (line?.picked) {
-        data.cell.styles.textColor = [140, 140, 148];
-      }
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 28 },
+      2: { cellWidth: 62 },
+      3: { cellWidth: 12, halign: "right" },
+      4: { cellWidth: 14, halign: "right" },
+      5: { cellWidth: 22, halign: "right" },
+      6: { cellWidth: 24, halign: "right" },
     },
     margin: { left: MARGIN, right: MARGIN },
   });
@@ -324,52 +306,25 @@ export async function downloadOrderCierrePdf(order: Order, opts?: OrderPdfOption
   doc.text(totalLine, CONTENT_RIGHT, y, { align: "right" });
   y += 6;
 
-  if (order.lines.length > 0) {
+  if (order.deliveryNotes?.trim()) {
     y = ensureY(doc, y, 14);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(...INK);
-    doc.text("Picking rápido", MARGIN, y);
-    y += 3.5;
+    doc.text("Notas de entrega", MARGIN, y);
+    y += 4;
     doc.setFont("helvetica", "normal");
-
-    for (const line of order.lines) {
-      const value = (line.barcode || line.reference).trim();
-      y = ensureY(doc, y, 11);
-      doc.setFontSize(7.5);
-      doc.setTextColor(...INK);
-      doc.text(
-        `${pickMark(line)} ${line.reference} · x${line.quantity}${line.name ? ` · ${line.name.slice(0, 28)}` : ""}`,
-        MARGIN,
-        y + 2.5,
-      );
-      if (value) {
-        try {
-          const img = code128DataUrl(value, 18);
-          doc.addImage(img, "PNG", 118, y - 1, 64, 7);
-        } catch {
-          doc.setFontSize(6.5);
-          doc.setTextColor(...MUTED);
-          doc.text(value, 118, y + 2.5);
-        }
-      }
-      y += 10;
-    }
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    const dn = doc.splitTextToSize(order.deliveryNotes.trim(), CONTENT_RIGHT - MARGIN);
+    doc.text(dn, MARGIN, y);
+    y += dn.length * 3.5 + 2;
   }
 
   y = drawSignatures(doc, y + 2);
 
-  if (order.deliveryNotes?.trim()) {
-    y = ensureY(doc, y, 12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    const dn = doc.splitTextToSize(`Notas de entrega: ${order.deliveryNotes.trim()}`, CONTENT_RIGHT - MARGIN);
-    doc.text(dn, MARGIN, y);
-  }
-
-  drawPageFooters(doc);
-  doc.save(`cierre-${order.docNumber.replace(/[^\w\-]+/g, "_")}.pdf`);
+  drawPageFooters(doc, "ClarivPack · Comprobante de entrega · No sustituye factura fiscal");
+  doc.save(`entrega-${order.docNumber.replace(/[^\w\-]+/g, "_")}.pdf`);
 }
 
 /**
@@ -394,11 +349,11 @@ export async function downloadOrderPickingPdf(order: Order, opts?: OrderPdfOptio
   doc.setTextColor(...PRIMARY);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("Lite", textLeft, y + 3);
+  doc.text("ClarivPack", textLeft, y + 3);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  doc.text("Hoja de picking · barcodes separados", textLeft, y + 8);
+  doc.text("Hoja de picking · barcodes separados para pistola", textLeft, y + 8);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
@@ -442,74 +397,85 @@ export async function downloadOrderPickingPdf(order: Order, opts?: OrderPdfOptio
   doc.setFontSize(7.5);
   doc.text("#", LS_MARGIN + 2, y + 4.8);
   doc.text("Ref / SKU", LS_MARGIN + 12, y + 4.8);
-  doc.text("Producto", LS_MARGIN + 52, y + 4.8);
-  doc.text("Ud", LS_MARGIN + 130, y + 4.8);
-  doc.text("Código de barras", LS_MARGIN + 148, y + 4.8);
-  y += 10;
+  doc.text("Producto", LS_MARGIN + 48, y + 4.8);
+  doc.text("Ud", LS_MARGIN + 118, y + 4.8);
+  doc.text("Código de barras (uno por fila · bien separados)", LS_MARGIN + 138, y + 4.8);
+  y += 12;
 
-  const ROW_H = 22; // espacio generoso entre códigos
-  const BAR_W = 118;
-  const BAR_H = 14;
+  /** Altura de bloque por línea: barcode + etiqueta + aire para pistola. */
+  const ROW_H = 42;
+  /** Hueco blanco entre un código y el siguiente (anti-lectura del vecino). */
+  const ROW_GAP = 10;
+  const BAR_W = 130;
+  const BAR_H = 18;
+  const BAR_X = LS_MARGIN + 138;
 
   order.lines.forEach((line, idx) => {
-    y = ensureLandscapeY(doc, y, ROW_H + 2);
+    y = ensureLandscapeY(doc, y, ROW_H + ROW_GAP);
     const value = (line.barcode || line.reference).trim();
     const rowTop = y;
 
-    // Separador horizontal suave
+    // Franja de separación clara entre códigos (no pegados)
     if (idx > 0) {
-      doc.setDrawColor(230, 230, 235);
-      doc.setLineWidth(0.35);
-      doc.line(LS_MARGIN, rowTop - 3, LS_CONTENT_RIGHT, rowTop - 3);
+      doc.setFillColor(255, 255, 255);
+      doc.rect(LS_MARGIN, rowTop - ROW_GAP, LS_CONTENT_RIGHT - LS_MARGIN, ROW_GAP, "F");
+      doc.setDrawColor(180, 180, 190);
+      doc.setLineWidth(0.4);
+      doc.line(LS_MARGIN, rowTop - ROW_GAP / 2, LS_CONTENT_RIGHT, rowTop - ROW_GAP / 2);
     }
 
-    // Alternating subtle bg for whole row band
-    if (idx % 2 === 1) {
-      doc.setFillColor(248, 250, 252);
-      doc.rect(LS_MARGIN, rowTop - 2, LS_CONTENT_RIGHT - LS_MARGIN, ROW_H - 1, "F");
-    }
+    // Fondo suave del bloque (no del barcode: quiet zone blanca)
+    doc.setFillColor(idx % 2 === 1 ? 248 : 252, idx % 2 === 1 ? 250 : 252, idx % 2 === 1 ? 252 : 253);
+    doc.rect(LS_MARGIN, rowTop, BAR_X - LS_MARGIN - 4, ROW_H - 2, "F");
 
     doc.setTextColor(...INK);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text(String(idx + 1), LS_MARGIN + 2, rowTop + 6);
+    doc.setFontSize(10);
+    doc.text(String(idx + 1), LS_MARGIN + 2, rowTop + 8);
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    const refLines = doc.splitTextToSize(line.reference || "—", 36);
-    doc.text(refLines, LS_MARGIN + 12, rowTop + 5);
+    const refLines = doc.splitTextToSize(line.reference || "—", 32);
+    doc.text(refLines.slice(0, 2), LS_MARGIN + 12, rowTop + 7);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    const nameLines = doc.splitTextToSize(line.name || "—", 72);
-    doc.text(nameLines.slice(0, 2), LS_MARGIN + 52, rowTop + 5);
+    const nameLines = doc.splitTextToSize(line.name || "—", 64);
+    doc.text(nameLines.slice(0, 3), LS_MARGIN + 48, rowTop + 7);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(`×${line.quantity}`, LS_MARGIN + 130, rowTop + 7);
+    doc.setFontSize(12);
+    doc.text(`×${line.quantity}`, LS_MARGIN + 118, rowTop + 10);
+
+    // Zona barcode: fondo blanco + quiet zone amplia
+    doc.setFillColor(255, 255, 255);
+    doc.rect(BAR_X - 2, rowTop, BAR_W + 4, ROW_H - 2, "F");
+    doc.setDrawColor(220, 220, 225);
+    doc.setLineWidth(0.3);
+    doc.rect(BAR_X - 2, rowTop, BAR_W + 4, ROW_H - 2, "S");
 
     if (value) {
       try {
-        const img = code128DataUrl(value, 48, { barWidth: 2.2, margin: 10 });
-        doc.addImage(img, "PNG", LS_MARGIN + 148, rowTop, BAR_W, BAR_H);
+        const img = code128DataUrl(value, 56, { barWidth: 2.4, margin: 14 });
+        doc.addImage(img, "PNG", BAR_X, rowTop + 2, BAR_W, BAR_H);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(6.5);
+        doc.setFontSize(7);
         doc.setTextColor(...MUTED);
-        doc.text(value, LS_MARGIN + 148 + BAR_W / 2, rowTop + BAR_H + 3.5, { align: "center" });
+        doc.text(value, BAR_X + BAR_W / 2, rowTop + BAR_H + 8, { align: "center" });
       } catch {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
         doc.setTextColor(...MUTED);
-        doc.text(value, LS_MARGIN + 148, rowTop + 7);
+        doc.text(value, BAR_X, rowTop + 12);
       }
     } else {
       doc.setFont("helvetica", "italic");
-      doc.setFontSize(7.5);
+      doc.setFontSize(8);
       doc.setTextColor(...MUTED);
-      doc.text("Sin código", LS_MARGIN + 148, rowTop + 7);
+      doc.text("Sin código", BAR_X + 4, rowTop + 12);
     }
 
-    y = rowTop + ROW_H;
+    y = rowTop + ROW_H + ROW_GAP;
   });
 
   drawLandscapeFooters(doc);

@@ -125,7 +125,7 @@ export function UpgradeModal({
               <X size={18} />
             </button>
             <div className="flex items-center gap-3 pr-10">
-              <BoxMascot mood="wow" className="h-14 w-[52px] shrink-0 sm:h-16 sm:w-[58px]" />
+              <BoxMascot mood="wow" className="h-16 w-16 shrink-0 sm:h-[72px] sm:w-[72px]" />
               <div className="min-w-0">
                 <h2 id="upgrade-title" className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">
                   Pricing

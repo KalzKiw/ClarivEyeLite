@@ -62,15 +62,16 @@ export function PickingPage() {
   }
 
   const onScan = useCallback(
-    (raw: string) => {
+    (raw: string): boolean => {
       const ids = allOrders.map((o) => o.id);
       const orderId = matchOrderIdFromToken(raw, ids);
       if (orderId) {
         setScanning(false);
         goToOrder(orderId);
-        return;
+        return true;
       }
       setScanMsg("Escanea la barra o el QR del pedido, o elige uno de la lista");
+      return false;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allOrders],

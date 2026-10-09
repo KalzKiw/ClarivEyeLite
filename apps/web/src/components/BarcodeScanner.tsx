@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { createBarcodeReader, SCAN_ROI } from "@/lib/barcode-reader";
 import {
   playScanBeep,
+  playScanErrorBeep,
   unlockScanAudio,
+  vibrateScanError,
   vibrateScanSuccess,
 } from "@/lib/scan-feedback";
 import { getScanMode, setScanMode, type ScanMode } from "@/lib/scan-mode";
@@ -112,13 +114,18 @@ function trackSupportsTorch(track: MediaStreamTrack | undefined): boolean {
 export function BarcodeScanner({
   onScan,
   onClose,
+  layout = "fullscreen",
 }: {
-  onScan: (raw: string) => void;
+  /** `false` = código no válido / error de negocio (vibración error). */
+  onScan: (raw: string) => boolean | void;
   onClose: () => void;
+  /** `embedded` = cámara compacta (picking con lista visible debajo). */
+  layout?: "fullscreen" | "embedded";
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
+  const embedded = layout === "embedded";
 
   const candidateRef = useRef<string | null>(null);
   const stableSinceRef = useRef(0);
@@ -347,10 +354,6 @@ export function BarcodeScanner({
     if (!value) return;
 
     unlockScanAudio();
-    playScanBeep();
-    vibrateScanSuccess();
-    setFlash(true);
-    window.setTimeout(() => setFlash(false), 420);
 
     setLastCaptured(value);
     candidateRef.current = null;
@@ -370,7 +373,17 @@ export function BarcodeScanner({
       blockSameUntilLeaveRef.current = value;
     }
 
-    onScanRef.current(value);
+    const result = onScanRef.current(value);
+    const ok = result !== false;
+    if (ok) {
+      playScanBeep();
+      vibrateScanSuccess();
+      setFlash(true);
+      window.setTimeout(() => setFlash(false), 420);
+    } else {
+      playScanErrorBeep();
+      vibrateScanError();
+    }
   }
   commitCaptureRef.current = commitCapture;
 
@@ -408,19 +421,25 @@ export function BarcodeScanner({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/90"
+      className={
+        embedded
+          ? "flex flex-col overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-lg"
+          : "fixed inset-0 z-50 flex flex-col bg-black/90"
+      }
       onPointerDown={() => unlockScanAudio()}
     >
-      <div className="flex items-center justify-between gap-2 px-4 py-3 text-white">
-        <p className="text-sm font-medium">Escanear barcode / QR</p>
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5 text-white sm:px-4 sm:py-3">
+        <p className="text-sm font-medium">
+          {embedded ? "Escaneo picking" : "Escanear barcode / QR"}
+        </p>
         <div className="flex items-center gap-2">
           {torchAvailable ? (
             <Button
               type="button"
               variant="ghost"
               className={[
-                "border-white/30 text-white",
-                torchOn ? "bg-amber-400/25 text-amber-100" : "",
+                "border border-white/40 bg-zinc-800 text-white hover:bg-zinc-700",
+                torchOn ? "border-amber-400/50 bg-amber-500/30 text-amber-50" : "",
               ].join(" ")}
               onClick={() => void toggleTorch()}
               aria-pressed={torchOn}
@@ -431,7 +450,7 @@ export function BarcodeScanner({
           <Button
             type="button"
             variant="ghost"
-            className="border-white/30 text-white"
+            className="border border-white/40 bg-zinc-800 text-white hover:bg-zinc-700"
             onClick={onClose}
           >
             Cerrar
@@ -471,27 +490,33 @@ export function BarcodeScanner({
         </div>
       </div>
 
-      <div className="relative mx-auto w-full max-w-lg flex-1 px-4 pb-8">
+      <div
+        className={
+          embedded
+            ? "relative w-full px-3 pb-3"
+            : "relative mx-auto w-full max-w-lg flex-1 px-4 pb-8"
+        }
+      >
         {error ? (
-          <div className="flex h-full flex-col items-center justify-center gap-4 rounded-xl bg-zinc-900 px-6 text-center">
+          <div className="flex flex-col items-center justify-center gap-4 rounded-xl bg-zinc-900 px-6 py-6 text-center">
             <p className="text-sm leading-relaxed text-white/90">{error}</p>
             {isGun ? (
               <p className="text-xs text-white/55">
                 Sin cámara puedes usar una pistola HID: apunta y pulsa el gatillo (Enter).
               </p>
             ) : null}
-            <div className="w-full max-w-sm space-y-2 text-left">
+            <div className="w-full max-w-sm space-y-2 text-left [&_span]:text-white/75">
               <Field label="Código a mano">
                 <TextInput
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
                   placeholder="CEL1… o EAN"
-                  className="bg-zinc-800 text-white"
+                  className="border-white/20 bg-zinc-800 text-white placeholder:text-white/40"
                 />
               </Field>
               <Button
                 type="button"
-                className="w-full"
+                className="w-full bg-blue-600 text-white hover:bg-blue-500"
                 disabled={!manual.trim()}
                 onClick={() => {
                   commitCapture(manual.trim());
@@ -502,13 +527,17 @@ export function BarcodeScanner({
               </Button>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
-              <Button type="button" onClick={() => setRetryKey((k) => k + 1)}>
+              <Button
+                type="button"
+                className="bg-blue-600 text-white hover:bg-blue-500"
+                onClick={() => setRetryKey((k) => k + 1)}
+              >
                 Reintentar cámara
               </Button>
               <Button
                 type="button"
                 variant="ghost"
-                className="border-white/30 text-white"
+                className="border border-white/40 bg-zinc-800 text-white hover:bg-zinc-700"
                 onClick={onClose}
               >
                 Cerrar
@@ -520,7 +549,11 @@ export function BarcodeScanner({
             <div className="relative overflow-hidden rounded-xl">
               <video
                 ref={videoRef}
-                className="aspect-[3/4] h-auto max-h-[55vh] w-full bg-black object-contain"
+                className={
+                  embedded
+                    ? "aspect-video max-h-[38vh] w-full bg-black object-cover"
+                    : "aspect-[3/4] h-auto max-h-[55vh] w-full bg-black object-contain"
+                }
                 playsInline
                 muted
               />
@@ -619,7 +652,7 @@ export function BarcodeScanner({
             {!isGun ? (
               <Button
                 type="button"
-                className="mt-3 h-12 w-full text-base font-semibold"
+                className="mt-3 h-12 w-full bg-blue-600 text-base font-semibold text-white hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-white/40"
                 disabled={!candidate || !stable}
                 onClick={onConfirmCandidate}
               >
@@ -627,18 +660,24 @@ export function BarcodeScanner({
               </Button>
             ) : null}
 
-            <div className="mt-4 space-y-2 rounded-xl bg-zinc-900/80 p-3">
+            <div
+              className={
+                embedded
+                  ? "mt-2 space-y-2 rounded-lg bg-zinc-900/80 p-2 [&_span]:text-white/75"
+                  : "mt-4 space-y-2 rounded-xl bg-zinc-900/80 p-3 [&_span]:text-white/75"
+              }
+            >
               <Field label="O escribe el código">
                 <TextInput
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
                   placeholder="CEL1… o referencia"
-                  className="bg-zinc-800 text-white"
+                  className="border-white/20 bg-zinc-800 text-white placeholder:text-white/40"
                 />
               </Field>
               <Button
                 type="button"
-                className="w-full"
+                className="w-full bg-blue-600 text-white hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-white/40"
                 disabled={!manual.trim()}
                 onClick={() => {
                   commitCapture(manual.trim());

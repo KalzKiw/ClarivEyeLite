@@ -8,6 +8,7 @@ export function Sheet({
   onClose,
   title,
   description,
+  headerAction,
   children,
   footer,
 }: {
@@ -15,6 +16,8 @@ export function Sheet({
   onClose: () => void;
   title: string;
   description?: string;
+  /** Acción principal bajo el título (p. ej. Ir a picking). */
+  headerAction?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -44,9 +47,14 @@ export function Sheet({
           "absolute inset-y-0 right-0 flex h-full w-[92vw] max-w-md flex-col border-l border-border bg-card shadow-xl sm:max-w-lg",
         )}
       >
-        <header className="shrink-0 border-b border-border px-5 py-4 pr-12">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        <header className="relative shrink-0 space-y-3 border-b border-border px-5 py-4 pr-12">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+            {description ? (
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
+          {headerAction ? <div className="pr-0">{headerAction}</div> : null}
           <button
             type="button"
             onClick={onClose}

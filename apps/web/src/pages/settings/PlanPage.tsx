@@ -1,4 +1,4 @@
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 import { SettingsBack } from "@/components/SettingsNavRow";
 import { UpgradeModal } from "@/components/UpgradeModal";
@@ -8,11 +8,12 @@ import { loadScanStats } from "@/lib/scan-stats";
 import { savePlan, type Plan } from "@/lib/store";
 import { usePlan } from "@/lib/use-app-store";
 
-const PRO_BENEFITS = [
+const FREE_POINTS = ["3 pedidos abiertos", "1 usuario", "ClarivScan básico"];
+const PRO_POINTS = [
   "Pedidos abiertos ilimitados",
-  "Hasta 3 usuarios",
+  "Hasta 3 usuarios / operarios",
   "ClarivScan sin freno",
-  "Equipo / operarios",
+  "Equipo y roles",
 ];
 
 export function PlanPage() {
@@ -30,87 +31,96 @@ export function PlanPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <SettingsBack />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Plan</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Invierte en tu salida de almacén</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tu plan actual y lo que desbloquea Pro
+        </p>
       </div>
 
       {resolved > 0 ? (
-        <Card className="border-primary/30 bg-primary/5 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-primary">ClarivPack te ha ayudado</p>
-          <p className="mt-1 text-lg font-semibold">
-            {resolved} lectura{resolved === 1 ? "" : "s"} ClarivScan resuelta
-            {resolved === 1 ? "" : "s"}
+        <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            ClarivScan este mes
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-base font-semibold tabular-nums">
+            {resolved} lectura{resolved === 1 ? "" : "s"} resuelta{resolved === 1 ? "" : "s"}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {stats.ok} OK · {stats.assisted} asistidas · {stats.fail} fallidas
           </p>
-        </Card>
+        </div>
       ) : null}
 
-      <Card
-        className={
-          plan === "pro"
-            ? "space-y-3 border-violet-300 bg-gradient-to-br from-violet-600 to-fuchsia-700 text-white"
-            : "space-y-3"
-        }
-      >
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p
-              className={`text-xs font-bold uppercase tracking-wider ${plan === "pro" ? "text-white/80" : "text-muted-foreground"}`}
-            >
-              Plan actual
-            </p>
-            <p className="mt-1 text-2xl font-semibold">{plan === "pro" ? "Pro" : "Free"}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card
+          className={`space-y-3 p-4 ${
+            plan === "free" ? "border-primary ring-1 ring-primary/30" : "opacity-90"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Free</p>
+            {plan === "free" ? (
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                Actual
+              </span>
+            ) : null}
           </div>
-          {plan === "pro" ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-1 text-[10px] font-bold uppercase">
-              <Sparkles size={12} />
-              Activo
-            </span>
-          ) : (
-            <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold uppercase text-muted-foreground">
-              Limitado
-            </span>
-          )}
-        </div>
-        {plan === "free" ? (
-          <p className="text-sm text-muted-foreground">3 pedidos abiertos · 1 usuario</p>
-        ) : (
-          <p className="text-sm text-white/85">Sin tope · hasta 3 usuarios</p>
-        )}
-      </Card>
-
-      {plan === "free" ? (
-        <Card className="space-y-4 border-violet-200 bg-gradient-to-b from-violet-50 to-card">
-          <div>
-            <p className="text-lg font-semibold tracking-tight">Pasa a Pro</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Desde <span className="font-semibold text-violet-700">19 €/mes</span> (anual) · sin
-              permanencia
-            </p>
-          </div>
-          <ul className="space-y-2">
-            {PRO_BENEFITS.map((b) => (
-              <li key={b} className="flex items-center gap-2 text-sm">
-                <span className="flex size-5 items-center justify-center rounded-full bg-violet-100 text-violet-700">
-                  <Check size={12} strokeWidth={3} />
-                </span>
-                {b}
+          <p className="text-2xl font-semibold tracking-tight">0 €</p>
+          <ul className="space-y-1.5">
+            {FREE_POINTS.map((p) => (
+              <li key={p} className="flex gap-2 text-sm text-muted-foreground">
+                <Check size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
+                {p}
               </li>
             ))}
           </ul>
-          {isOwner ? (
-            <Button type="button" className="w-full" onClick={() => setUpgradeOpen(true)}>
-              Ver planes y pagar
-            </Button>
-          ) : (
-            <p className="text-sm text-muted-foreground">Solo el dueño puede cambiar el plan.</p>
-          )}
         </Card>
+
+        <Card
+          className={`space-y-3 p-4 ${
+            plan === "pro" ? "border-primary ring-1 ring-primary/30" : ""
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Pro</p>
+            {plan === "pro" ? (
+              <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                Actual
+              </span>
+            ) : null}
+          </div>
+          <p className="text-2xl font-semibold tracking-tight">
+            19 €<span className="text-sm font-normal text-muted-foreground">/mes</span>
+          </p>
+          <p className="text-xs text-muted-foreground">Facturación anual · sin permanencia</p>
+          <ul className="space-y-1.5">
+            {PRO_POINTS.map((p) => (
+              <li key={p} className="flex gap-2 text-sm text-foreground">
+                <Check size={14} className="mt-0.5 shrink-0 text-primary" strokeWidth={2.5} />
+                {p}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+
+      {plan === "free" && isOwner ? (
+        <Button type="button" className="w-full" onClick={() => setUpgradeOpen(true)}>
+          Pasar a Pro
+        </Button>
+      ) : null}
+      {plan === "free" && !isOwner ? (
+        <p className="text-center text-sm text-muted-foreground">
+          Solo el dueño del negocio puede cambiar el plan.
+        </p>
+      ) : null}
+      {plan === "pro" ? (
+        <p className="text-center text-sm text-muted-foreground">
+          Pro activo. Gracias por apoyar ClarivPack.
+        </p>
       ) : null}
 
       {isOwner ? (

@@ -313,6 +313,10 @@ export function LoginPage() {
                             password2 && password !== password2 ? "Aún no coinciden" : undefined
                           }
                         />
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Al crear la cuenta recibirás un enlace o código en el email para
+                          confirmarla. El email no se podrá cambiar después: es tu acceso.
+                        </p>
                         <ErrorNote message={error} />
                         <div className="grid grid-cols-2 gap-2">
                           <Button

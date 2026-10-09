@@ -72,9 +72,14 @@ export function ProfilePage() {
           <Field label="Nombre">
             <TextInput value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
           </Field>
-          <Field label="Email">
-            <TextInput value={user?.email ?? ""} disabled />
+          <Field label="Email (login)">
+            <TextInput value={user?.email ?? ""} disabled className="bg-muted/60" />
           </Field>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            El email no se puede cambiar aquí: es tu identidad de acceso. Al registrarte debes
+            confirmar la cuenta (enlace o código del correo). Si necesitas otro email, crea una
+            cuenta nueva.
+          </p>
           <div className="rounded-xl bg-muted/50 px-3 py-2.5">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Rol
