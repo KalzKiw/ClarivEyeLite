@@ -4,6 +4,7 @@ export * from "./column-merge";
 export * from "./document-parser";
 export * from "./document-profiles";
 export * from "./line-audit";
+export * from "./line-role";
 export * from "./orders";
 export * from "./order-token";
 export * from "./pdf-layout";

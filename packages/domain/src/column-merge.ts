@@ -1,6 +1,7 @@
 import { type DocumentLine, type DocumentParseResult, type DocumentType } from "./document-parser";
 import { parseAnyDocument } from "./document-profiles";
-import { isJunkContent, isJunkLine, scoreParseResult } from "./quality-gate";
+import { isProductLine } from "./line-role";
+import { isJunkContent, scoreParseResult } from "./quality-gate";
 
 /** Una fila de tabla (co-ocurrencia SKU + desc + nums). */
 export type ColumnTableRow = {
@@ -56,15 +57,13 @@ function isJunkSku(token: string): boolean {
   return false;
 }
 
-/** Cabecera / dirección / transporte colados como “nombre de producto” */
+/** Cabecera / no-producto (clasificador estructural + tipología de vía). */
 export function isJunkDesc(line: string): boolean {
   const t = (line || "").trim();
   if (!t) return true;
   if (isHeaderish(t)) return true;
   if (isJunkContent(t)) return true;
-  return /lugar\s+de\s+entrega|destinatario|atenci[oó]n\s+a|tlf\.?\s*contacto|datos\s+de\s+transporte|transportista|matr[ií]cula|observaciones|logotipo|albar[aá]n\s+de\s+entrega|comercializadora|s\.?\s*l\.?\s*$|s\.?\s*a\.?\s*$|^c\/\s|^av\.?\s|planta\s+baja|p[aá]gina\s+\d|nif\s*:|agente\s*:|bultos\s+totales|peso\s+total|m[eé]todo\s*:|entregar\s+por|horario\s+de\s+recepci/i.test(
-    t,
-  );
+  return false;
 }
 /** Refs: ART-0012 / 78958 / MESA-01 / 77 — prioriza prefijo completo (no solo dígitos) */
 export function extractSkuLines(skuText: string): string[] {
@@ -370,12 +369,10 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
   }
 
   lines = enrichFromFullText(lines, bundle.fullText || joined);
-  // Quitar PROD inventados, tel/CP/observaciones y basura de cabecera
+  // Deny-by-default: solo líneas con score de producto; nunca PROD inventado
   lines = lines.filter((l) => {
     if (/^PROD-\d+$/i.test(l.reference)) return false;
-    if (isJunkLine(l)) return false;
-    if (l.name && isJunkDesc(l.name) && !isPrefixedSku(l.reference)) return false;
-    return true;
+    return isProductLine(l);
   });
 
   const columnDoc: DocumentParseResult = {

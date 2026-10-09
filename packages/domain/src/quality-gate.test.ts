@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   cleanLines,
   extractAssistedCandidates,
-  isJunkContent,
   isJunkReference,
   namedLineRatio,
   passesQualityGate,
@@ -81,16 +80,8 @@ describe("quality-gate", () => {
     expect(passesQualityGate(d)).toBe(true);
   });
 
-  it("limpia teléfono/CP/observaciones pegadas del OCR", () => {
-    expect(isJunkReference("TLFCONTACTO34600000000")).toBe(true);
-    expect(isJunkContent("41001 Sevilla, España")).toBe(true);
-    expect(
-      isJunkContent(
-        "ENTREGARPORELMUELLEDECARGATRASEROHORARIODERECEPCINDE0900A1400HLAMERCANCADEBE",
-      ),
-    ).toBe(true);
+  it("cleanLines usa clasificador estructural (no blacklist de ciudad)", () => {
     expect(isJunkReference("ART-0012")).toBe(false);
-
     const cleaned = cleanLines([
       {
         reference: "ART-0012",
@@ -101,7 +92,7 @@ describe("quality-gate", () => {
         confidence: 0.9,
       },
       {
-        reference: "TLFCONTACTO34600000000",
+        reference: "XYZCONTACTO699887766",
         name: null,
         quantity: 1,
         packages: 0,
@@ -109,7 +100,7 @@ describe("quality-gate", () => {
         confidence: 0.4,
       },
       {
-        reference: "41001 Sevilla, España",
+        reference: "99102 Nombreraro",
         name: null,
         quantity: 1,
         packages: 0,
@@ -117,7 +108,7 @@ describe("quality-gate", () => {
         confidence: 0.4,
       },
       {
-        reference: "ENTREGARPORELMUELLEDECARGATRASEROHORARIODERECEPCINDE0900A1400HLAMERCANCADEBE",
+        reference: "ENTREGARPORACCESOLATERALHORARIOMANANAREVISARMERCANCIA",
         name: null,
         quantity: 1,
         packages: 0,

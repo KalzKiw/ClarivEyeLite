@@ -4,7 +4,8 @@
  */
 
 import type { DocumentLine } from "./document-parser";
-import { isJunkContent, isJunkReference } from "./quality-gate";
+import { isNonProductText } from "./line-role";
+import { isJunkReference } from "./quality-gate";
 
 export type LineWarningCode =
   | "missing_name"
@@ -46,8 +47,8 @@ export function auditLine(line: DocumentLine): AuditedLine {
   };
 
   if (!ref) push("empty_ref");
-  else if (isJunkReference(ref) || isJunkContent(ref)) push("junk_ref");
-  if (line.name && isJunkContent(line.name)) push("junk_ref");
+  else if (isJunkReference(ref) || isNonProductText(ref)) push("junk_ref");
+  if (line.name && isNonProductText(line.name)) push("junk_ref");
 
   // Fechas ddmmyyyy / yyyymmdd
   if (/^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(19|20)\d{2}$/.test(ref) || /^(19|20)\d{6}$/.test(ref)) {

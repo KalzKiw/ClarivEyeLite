@@ -1,7 +1,7 @@
 import {
   auditLine,
   canCreateOrder,
-  isJunkLine,
+  isProductLine,
   type AssistedCandidate,
   type LineWarning,
 } from "@clariveye-lite/domain";
@@ -126,7 +126,7 @@ export function ClarivScanPage() {
       setCandidates(parsed.candidates ?? []);
 
       if (parsed.lines.length > 0) {
-        const drafted = parsed.lines.filter((l) => !isJunkLine(l)).map(draftFromParsed);
+        const drafted = parsed.lines.filter(isProductLine).map(draftFromParsed);
         setLines(drafted);
         const bad = drafted.filter((l) => l.suspicious).length;
         if (bad > 0) {

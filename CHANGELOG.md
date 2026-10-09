@@ -1,12 +1,16 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.23 — 2026-10-09
+
+### Clasificador estructural de líneas (deny-by-default)
+- `line-role`: product / phone / address / prose / meta por forma, no por frases de un albarán.
+- Solo entra al pedido si `productScore ≥ 0.65`; quality-gate y ClarivScan delegan ahí.
+
 ## 0.3.22 — 2026-10-09
 
 ### Perfil alb_codigo — albarán ART-/CBL- con OCR por columnas
 - Reglas: SKU `XX-NNNN` (sin ALB/PED), zip descripciones + `N M uds` (bultos/total).
-- Blacklist cabecera (tel, NIF, transporte). Fixture OCR real ALB-2026-0842.
 - `column-merge`: no recortar `ART-0012`→`0012`; no inventar `PROD-N` con direcciones; compite con `parseAnyDocument`.
-- Filtro basura OCR pegada: `TLFCONTACTO…`, CP+ciudad, observaciones `ENTREGAR…MUELLE…`.
 
 ## 0.3.21 — 2026-10-09
 

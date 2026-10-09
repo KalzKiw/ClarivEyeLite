@@ -9,7 +9,7 @@ import {
   type DocumentParseResult,
   type DocumentType,
 } from "./document-parser";
-import { isJunkContent, isJunkReference } from "./quality-gate";
+import { isNonProductText, looksLikeArticleSku } from "./line-role";
 
 export type DocumentProfile =
   | "easywms"
@@ -591,11 +591,11 @@ function extractAlbCodigo(text: string): DocumentLine[] {
   for (const raw of descSrc.split(/\n/)) {
     const t = raw.replace(/\s+/g, " ").trim();
     if (t.length < 4) continue;
-    if (ALB_DESC_STOP.test(t) || isJunkContent(t)) break;
+    if (ALB_DESC_STOP.test(t) || isNonProductText(t)) break;
     if (isPrefixedArticleCode(t)) continue;
     if (/^\d+([.,]\d+)?\s*(kg|uds?|palets?)?$/i.test(t)) continue;
     if (/^[+\d\s\-()]{6,}$/.test(t)) continue;
-    if (isJunkContent(t)) continue;
+    if (isNonProductText(t)) continue;
     names.push(t);
   }
 
@@ -621,8 +621,8 @@ function extractAlbCodigo(text: string): DocumentLine[] {
   // 4) Zip por índice (orden de columna OCR)
   const n = codes.length;
   for (let i = 0; i < n; i++) {
-    if (isJunkReference(codes[i])) continue;
-    const name = names[i] && !isJunkContent(names[i]) ? names[i] : null;
+    if (!looksLikeArticleSku(codes[i]) || isNonProductText(codes[i])) continue;
+    const name = names[i] && !isNonProductText(names[i]) ? names[i] : null;
     const q = qtys[i];
     const row = line(
       codes[i],

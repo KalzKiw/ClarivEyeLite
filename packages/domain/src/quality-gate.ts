@@ -1,94 +1,49 @@
 /**
  * Contrato “nunca te dejo tirado”: QualityGate + candidatos asistidos.
+ * Limpieza de líneas: clasificador estructural (line-role), no blacklist por albarán.
  */
 
 import type { DocumentLine, DocumentParseResult } from "./document-parser";
+import {
+  compactOcr,
+  filterProductLines,
+  isNonProductText,
+  isProductLine,
+  looksLikeArticleSku,
+} from "./line-role";
 
-const JUNK_REF =
-  /^(art|descrip|cantid|total|subtotal|iva|empresa|cliente|fecha|orden|compra|page|pagina|batch|tareas?)$/i;
-
-/** Compacta texto OCR (quita espacios/puntos) para pillar “TLFCONTACTO34…” */
-export function compactOcr(s: string): string {
-  return (s || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toUpperCase();
-}
+export { compactOcr, looksLikeArticleSku } from "./line-role";
 
 const DOC_PREFIX = /^(ALB|PED|OC|OT|FAC|INV|NIF|CIF|IVA|OUT|DL|BATCH|PACK|REF)$/i;
 
-function looksLikeArticleSku(token: string): boolean {
-  const t = token.trim();
-  if (/^Item\d+$/i.test(t) || /^SKU\d+/i.test(t)) return true;
-  if (/^0\d{4,5}$/.test(t) || /^\d{4,8}$/.test(t)) return true;
-  const m = t.match(/^([A-Za-zÁÉÍÓÚÑ]{2,5})-(\d{3,6})$/i);
-  if (m && !DOC_PREFIX.test(m[1])) return true;
-  return false;
-}
-
-/** Cabecera / teléfono / dirección / observaciones coladas como ref o nombre */
+/** @deprecated Prefer isNonProductText / classifyText — se mantiene por compat. */
 export function isJunkContent(text: string | null | undefined): boolean {
-  const raw = (text || "").trim();
-  if (!raw) return false;
-  if (looksLikeArticleSku(raw)) return false;
-
-  const c = compactOcr(raw);
-
-  // Teléfono / contacto pegado: TLFCONTACTO34600000000
-  if (/(?:TLF|TELEFONO|TELF|CONTACTO|WHATSAPP|MOVIL)/.test(c) && /\d{6,}/.test(c)) return true;
-  if (/^(?:\+?34)?[67]\d{8}$/.test(c) || /34[67]\d{8}/.test(c)) return true;
-
-  // CP + ciudad: 41001 Sevilla, España
-  if (/\d{5}(?:MADRID|SEVILLA|BARCELONA|VALENCIA|BILBAO|ZARAGOZA|MALAGA|ESPANA)/.test(c)) return true;
-  if (/^\d{5}$/.test(raw.trim()) && raw.length <= 6) return true;
-
-  // Dirección
-  if (/^(C\/|CALLE|AV\.?|AVENIDA|PLAZA|PASEO|CRTA|CARRETERA)\b/i.test(raw)) return true;
-  if (/PLANTABAJA|NAVE\d|DESTINATARIO|LUGARDEENTREGA|ATENCIONA|COMERCIALIZADORA/.test(c)) return true;
-
-  // Observaciones / transporte (con o sin espacios)
-  if (
-    /ENTREGAR|MUELLEDECARGA|HORARIODERECEPC|LAMERCANC|ANTESDELAFIRMA|DATOSDETRANSPORTE|TRANSPORTISTA|MATRICULA|BULTOSTOTALES|PESOTOTAL|OBSERVACIONES|LOGOTIPO|ALBARANDEENTREGA/.test(
-      c,
-    )
-  ) {
-    return true;
-  }
-
-  // OCR pegado sin espacios y largo (no un nombre real tipo “Soporte articulado…”)
-  if (!/\s/.test(raw) && c.length >= 22 && !looksLikeArticleSku(raw)) {
-    return true;
-  }
-
-  return false;
+  return isNonProductText(text);
 }
 
 export function isJunkReference(ref: string): boolean {
   const t = (ref || "").trim();
   if (!t || t.length < 2) return true;
   if (looksLikeArticleSku(t)) return false;
-  if (JUNK_REF.test(t)) return true;
+  if (isNonProductText(t)) return true;
+  // Solo letras cortas sin dígitos (cabecera)
   if (/^[A-ZÁÉÍÓÚÑ]{2,10}$/i.test(t) && !/\d/.test(t) && !/^Item/i.test(t)) return true;
-  if (isJunkContent(t)) return true;
   return false;
 }
 
 export function isJunkName(name: string | null | undefined): boolean {
   const t = (name || "").trim();
   if (!t) return false;
-  return isJunkContent(t) || JUNK_REF.test(t);
+  return isNonProductText(t);
 }
 
-/** ¿La línea es basura de cabecera/pie aunque tenga “ref”? */
+/** Línea que no supera el score de producto. */
 export function isJunkLine(line: DocumentLine): boolean {
-  if (isJunkReference(line.reference)) return true;
-  if (isJunkName(line.name)) return true;
-  return false;
+  return !isProductLine(line);
 }
 
 export function cleanLines(lines: DocumentLine[]): DocumentLine[] {
-  return lines.filter((l) => !isJunkLine(l));
+  return filterProductLines(lines);
 }
 
 /** Score de calidad del parse (más alto = mejor). */
@@ -121,9 +76,7 @@ export function namedLineRatio(doc: DocumentParseResult): number {
 }
 
 /**
- * Gate duro: refs limpias + ratio de nombres (evita “OK” con solo códigos pelados).
- * ≥2 líneas: score≥4 y (namedRatio≥0.5 o ≥2 nombres).
- * 1 línea: Item/SKU con nombre, o nombre≥3 + qty.
+ * Gate duro: refs limpias + ratio de nombres (evita “OK” solo con códigos pelados).
  */
 export function passesQualityGate(doc: DocumentParseResult): boolean {
   const lines = cleanLines(doc.lines);
@@ -159,7 +112,8 @@ export function extractAssistedCandidates(rawText: string): AssistedCandidate[] 
   const push = (reference: string, kind: AssistedCandidate["kind"]) => {
     const k = `${kind}:${reference}`;
     if (seen.has(k)) return;
-    if (isJunkReference(reference) || isJunkContent(reference)) return;
+    if (isJunkReference(reference) || isNonProductText(reference)) return;
+    if (kind === "ref" && !looksLikeArticleSku(reference) && !/^\d{4,8}$/.test(reference)) return;
     seen.add(k);
     out.push({ reference, kind });
   };
