@@ -37,6 +37,7 @@ export function SettingsPage() {
         icon={<CreditCard size={18} />}
         title="Plan"
         meta={plan === "pro" ? "Pro" : "Free"}
+        badge={plan === "free" ? "−34%" : undefined}
       />
       <SettingsNavRow
         to="/ajustes/lecturas"

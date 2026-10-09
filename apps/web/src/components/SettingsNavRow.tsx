@@ -8,12 +8,15 @@ export function SettingsNavRow({
   icon,
   title,
   meta,
+  badge,
   className,
 }: {
   to: string;
   icon: ReactNode;
   title: string;
   meta?: string;
+  /** Badge destacado (p.ej. descuento −34%) */
+  badge?: string;
   className?: string;
 }) {
   return (
@@ -29,7 +32,14 @@ export function SettingsNavRow({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">{title}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-foreground">{title}</p>
+            {badge ? (
+              <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm shadow-rose-900/25">
+                {badge}
+              </span>
+            ) : null}
+          </div>
           {meta ? <p className="truncate text-xs text-muted-foreground">{meta}</p> : null}
         </div>
       </div>
