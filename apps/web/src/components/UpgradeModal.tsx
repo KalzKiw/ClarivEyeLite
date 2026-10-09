@@ -1,7 +1,6 @@
 import { FREE_OPEN_LIMIT } from "@clariveye-lite/domain";
 import { Check, Minus, Package, Sparkles, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { BoxMascot } from "@/components/BoxMascot";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
@@ -24,12 +23,12 @@ const PRO_FEATURES: Array<{ ok: boolean; label: string }> = [
   { ok: true, label: "ClarivScan sin freno" },
   { ok: true, label: "Equipo / operarios" },
   { ok: true, label: "Perfiles de lectura por negocio" },
-  { ok: true, label: "Soporte prioritario (demo)" },
+  { ok: true, label: "Soporte prioritario" },
 ];
 
 const PRICE = {
-  monthly: { amount: 29, period: "mes", note: "Sin permanencia", billed: "29 € cada mes" },
-  annual: { amount: 19, period: "mes", note: "Ahorras 120 €/año", billed: "228 € facturados al año" },
+  monthly: { amount: 29, period: "mes", note: "Sin permanencia" },
+  annual: { amount: 19, period: "mes", note: "Ahorras 120 €/año" },
 };
 
 function FeatureRow({
@@ -82,6 +81,52 @@ function FeatureRow({
   );
 }
 
+/** Barra de cupo en 3 slots (FREE_OPEN_LIMIT). */
+function QuotaSlots({ used }: { used: number }) {
+  const filled = Math.min(FREE_OPEN_LIMIT, Math.max(0, used));
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-white/90">Cupo Free</p>
+        <p className="text-sm font-bold tabular-nums text-white">
+          {filled}/{FREE_OPEN_LIMIT} llenos
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-2" role="img" aria-label={`${filled} de ${FREE_OPEN_LIMIT} pedidos abiertos`}>
+        {Array.from({ length: FREE_OPEN_LIMIT }, (_, i) => {
+          const isFull = i < filled;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "flex h-10 flex-col items-center justify-center rounded-xl border-2 transition sm:h-12",
+                isFull
+                  ? "border-fuchsia-200/80 bg-gradient-to-b from-[#fce7f3] to-[#f0abfc] shadow-sm shadow-fuchsia-950/20"
+                  : "border-white/25 bg-black/20",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-wide sm:text-[11px]",
+                  isFull ? "text-violet-900" : "text-white/50",
+                )}
+              >
+                {isFull ? "Lleno" : "Libre"}
+              </span>
+              <span className={cn("text-xs font-bold sm:text-sm", isFull ? "text-violet-950" : "text-white/40")}>
+                {i + 1}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-sm font-medium leading-snug text-white">
+        Has alcanzado el límite de pedidos. Pásate a Premium para tener pedidos sin límite.
+      </p>
+    </div>
+  );
+}
+
 export function UpgradeModal({
   open,
   onClose,
@@ -122,7 +167,6 @@ export function UpgradeModal({
 
   const price = PRICE[billing];
   const used = typeof openCount === "number" ? openCount : FREE_OPEN_LIMIT;
-  const fill = Math.min(100, (used / FREE_OPEN_LIMIT) * 100);
 
   return (
     <div
@@ -138,13 +182,10 @@ export function UpgradeModal({
         onClick={onClose}
       />
 
-      {/* Centrado en vertical (móvil y desktop) */}
       <div className="relative z-10 flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:rounded-3xl">
-
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          {/* Cabecera compacta */}
           <div
-            className="relative px-4 pb-4 pt-3 sm:px-7 sm:pb-5 sm:pt-6"
+            className="relative px-4 pb-5 pt-3 sm:px-7 sm:pb-6 sm:pt-6"
             style={{
               background: "linear-gradient(135deg, #4c1d95 0%, #6d28d9 42%, #a21caf 100%)",
             }}
@@ -169,32 +210,18 @@ export function UpgradeModal({
                   id="upgrade-title"
                   className="mt-1.5 text-xl font-semibold leading-tight tracking-tight text-white sm:text-2xl"
                 >
-                  Elige Free o Pro
+                  Pricing
                 </h2>
-                <p className="mt-1 text-sm leading-snug text-white/90">
-                  Cupo Free lleno. Compara y desbloquea sin tope.
-                </p>
               </div>
             </div>
 
-            <div className="mt-3">
-              <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-white/85">
-                <span>Pedidos abiertos</span>
-                <span>
-                  {used}/{FREE_OPEN_LIMIT}
-                </span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-black/25">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#fce7f3] to-[#f0abfc] transition-all duration-500"
-                  style={{ width: `${fill}%` }}
-                />
-              </div>
+            <div className="mt-5 rounded-2xl border border-white/20 bg-black/15 p-3.5 sm:p-4">
+              <QuotaSlots used={used} />
             </div>
           </div>
 
           <div className="space-y-4 px-4 py-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-7 sm:py-6">
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex justify-center">
               <div
                 className="inline-flex rounded-full border border-violet-200 bg-white p-1 shadow-sm"
                 role="group"
@@ -235,10 +262,8 @@ export function UpgradeModal({
                   </span>
                 </button>
               </div>
-              <p className="text-[11px] font-medium text-zinc-500">{price.billed}</p>
             </div>
 
-            {/* Siempre lado a lado: Free | Pro */}
             <div className="grid grid-cols-2 items-stretch gap-2.5 sm:gap-4">
               <div className="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5">
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500 sm:text-[11px]">
@@ -311,17 +336,6 @@ export function UpgradeModal({
                 )}
               </div>
             </div>
-
-            <p className="text-center text-[11px] font-medium text-zinc-500">
-              Demo local · sin cobro real todavía ·{" "}
-              <Link
-                to="/ajustes"
-                onClick={onClose}
-                className="font-semibold text-violet-700 underline-offset-2 hover:underline"
-              >
-                Ir a Ajustes
-              </Link>
-            </p>
           </div>
         </div>
       </div>
