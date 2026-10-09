@@ -126,7 +126,7 @@ export function UpgradeModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="upgrade-title"
@@ -138,9 +138,8 @@ export function UpgradeModal({
         onClick={onClose}
       />
 
-      {/* Sheet: en móvil altura limitada + scroll interno; sin capas absolutas que se pisen */}
-      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:max-h-[90dvh] sm:rounded-3xl">
-        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-violet-200 sm:hidden" aria-hidden />
+      {/* Centrado en vertical (móvil y desktop) */}
+      <div className="relative z-10 flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:rounded-3xl">
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {/* Cabecera compacta */}
