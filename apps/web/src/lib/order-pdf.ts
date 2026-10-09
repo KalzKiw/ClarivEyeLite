@@ -1,5 +1,9 @@
 import type { Order, OrderLine } from "@clariveye-lite/domain";
-import { ORDER_STATUS_LABEL, encodeOrderToken } from "@clariveye-lite/domain";
+import {
+  ORDER_STATUS_LABEL,
+  encodeOrderBarcodeToken,
+  encodeOrderToken,
+} from "@clariveye-lite/domain";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { code128DataUrl, qrDataUrl } from "@/lib/order-barcode";
@@ -141,9 +145,11 @@ async function loadLogoDataUrl(): Promise<string | null> {
 
 /** PDF A4: orden de picking + comprobante del pedido. */
 export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
-  const token = encodeOrderToken(order.id);
-  const barcodeImg = code128DataUrl(token, 40);
-  const qrImg = await qrDataUrl(token, 96);
+  // Code128 corto (escaneable en móvil); QR con token completo
+  const barcodeToken = encodeOrderBarcodeToken(order.id);
+  const qrToken = encodeOrderToken(order.id);
+  const barcodeImg = code128DataUrl(barcodeToken, 64, { barWidth: 3, margin: 14 });
+  const qrImg = await qrDataUrl(qrToken, 220);
   const logoImg = await loadLogoDataUrl();
   const businessName = opts?.businessName?.trim() || "Negocio";
   const printedAt = fmtDate(new Date().toISOString());
@@ -214,18 +220,19 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
     doc.setFont("helvetica", "normal");
   }
 
-  // —— Códigos: barcode + QR del pedido (sin volcar el token UUID)
+  // —— Códigos: barra corta + QR grande (móvil lee mejor el QR)
   y += 2;
-  const codeH = 26;
+  const codeH = 38;
   doc.setDrawColor(230, 230, 235);
   doc.setLineWidth(0.25);
   doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, codeH, 1.5, 1.5, "S");
-  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 3, 95, 12);
+  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 4, 118, 18);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...MUTED);
-  doc.text(`Pedido ${order.docNumber} — escanea el codigo o el QR en Picking`, MARGIN + 3, y + 21);
-  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 28, y + 2, 22, 22);
+  doc.text(`Pedido ${order.docNumber} — barra o QR abren el picking`, MARGIN + 3, y + 28);
+  doc.text("En movil: mejor el QR", MARGIN + 3, y + 33);
+  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 36, y + 3, 32, 32);
   y += codeH + 4;
 
   // —— Tabla (empieza pronto; sin título grande ni KPIs) ——

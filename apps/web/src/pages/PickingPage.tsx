@@ -1,5 +1,5 @@
 import type { Order } from "@clariveye-lite/domain";
-import { ORDER_STATUS_LABEL, parseOrderToken } from "@clariveye-lite/domain";
+import { ORDER_STATUS_LABEL, matchOrderIdFromToken } from "@clariveye-lite/domain";
 import { ScanLine } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -50,13 +50,14 @@ export function PickingPage() {
 
   const onScan = useCallback(
     (raw: string) => {
-      const orderId = parseOrderToken(raw);
+      const ids = loadOrders().map((o) => o.id);
+      const orderId = matchOrderIdFromToken(raw, ids);
       if (orderId) {
         setScanning(false);
         goToOrder(orderId);
         return;
       }
-      setScanMsg("Escanea el código del pedido (CEL1) o elige uno de la lista");
+      setScanMsg("Escanea la barra o el QR del pedido, o elige uno de la lista");
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

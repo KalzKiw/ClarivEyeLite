@@ -3,7 +3,7 @@ import {
   ORDER_STATUS_LABEL,
   allLinesPicked,
   matchBarcode,
-  parseOrderToken,
+  matchOrderIdFromToken,
 } from "@clariveye-lite/domain";
 import { Check, FileDown, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -81,7 +81,8 @@ export function PickingOrderPage() {
 
   const onScan = useCallback(
     (raw: string) => {
-      const orderId = parseOrderToken(raw);
+      const ids = loadOrders().map((o) => o.id);
+      const orderId = matchOrderIdFromToken(raw, ids);
       if (orderId) {
         setScanning(false);
         if (orderId === id) {
