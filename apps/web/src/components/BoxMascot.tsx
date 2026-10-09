@@ -1,4 +1,4 @@
-/** Mascota Clariv — caja de cartón de logística con ojos. */
+/** Mascota Clariv — caja cartón (estilo ref) con ojos almendrados + iris. */
 export function BoxMascot({
   className = "",
   mood = "happy",
@@ -9,40 +9,45 @@ export function BoxMascot({
   const eyes =
     mood === "wink" ? (
       <>
-        {/* ojo izq cerrado */}
-        <path d="M34 58 H46" stroke="#3b2314" strokeWidth="3.2" strokeLinecap="round" />
-        {/* ojo der abierto */}
-        <ellipse cx="68" cy="58" rx="7" ry="8.5" fill="#fffef8" />
-        <circle cx="69" cy="59" r="3.8" fill="#2a1810" />
-        <circle cx="70.5" cy="56.5" r="1.3" fill="#fff" />
+        <path
+          d="M40 78 Q50 72 60 78"
+          stroke="#2c1810"
+          strokeWidth="3.2"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <ellipse cx="82" cy="77" rx="10" ry="11.5" fill="#fffef9" stroke="#2c1810" strokeWidth="2.3" />
+        <circle cx="83.5" cy="78.5" r="5" fill="#5c3a1e" />
+        <circle cx="85.4" cy="76" r="1.7" fill="#fff" />
       </>
     ) : mood === "wow" ? (
       <>
-        <ellipse cx="40" cy="57" rx="8" ry="9.5" fill="#fffef8" />
-        <circle cx="41" cy="58" r="4.2" fill="#2a1810" />
-        <circle cx="42.5" cy="55.5" r="1.4" fill="#fff" />
-        <ellipse cx="70" cy="57" rx="8" ry="9.5" fill="#fffef8" />
-        <circle cx="71" cy="58" r="4.2" fill="#2a1810" />
-        <circle cx="72.5" cy="55.5" r="1.4" fill="#fff" />
+        <ellipse cx="50" cy="76" rx="11" ry="13" fill="#fffef9" stroke="#2c1810" strokeWidth="2.3" />
+        <circle cx="51" cy="78" r="5.6" fill="#5c3a1e" />
+        <circle cx="53" cy="75.2" r="1.9" fill="#fff" />
+        <ellipse cx="82" cy="76" rx="11" ry="13" fill="#fffef9" stroke="#2c1810" strokeWidth="2.3" />
+        <circle cx="83" cy="78" r="5.6" fill="#5c3a1e" />
+        <circle cx="85" cy="75.2" r="1.9" fill="#fff" />
       </>
     ) : (
       <>
-        <ellipse cx="40" cy="58" rx="7" ry="8.5" fill="#fffef8" />
-        <circle cx="41" cy="59" r="3.8" fill="#2a1810" />
-        <circle cx="42.5" cy="56.5" r="1.3" fill="#fff" />
-        <ellipse cx="70" cy="58" rx="7" ry="8.5" fill="#fffef8" />
-        <circle cx="71" cy="59" r="3.8" fill="#2a1810" />
-        <circle cx="72.5" cy="56.5" r="1.3" fill="#fff" />
+        {/* Ojos tipo pet: blanco + iris marrón (no bolas negras de la foto) */}
+        <ellipse cx="50" cy="77" rx="10" ry="11.5" fill="#fffef9" stroke="#2c1810" strokeWidth="2.3" />
+        <circle cx="51.5" cy="78.5" r="5" fill="#5c3a1e" />
+        <circle cx="53.4" cy="76" r="1.7" fill="#fff" />
+        <ellipse cx="82" cy="77" rx="10" ry="11.5" fill="#fffef9" stroke="#2c1810" strokeWidth="2.3" />
+        <circle cx="83.5" cy="78.5" r="5" fill="#5c3a1e" />
+        <circle cx="85.4" cy="76" r="1.7" fill="#fff" />
       </>
     );
 
   const mouth =
     mood === "wow" ? (
-      <ellipse cx="55" cy="78" rx="6.5" ry="7.5" fill="#3b2314" />
+      <ellipse cx="66" cy="100" rx="6" ry="7" fill="#2c1810" />
     ) : (
       <path
-        d="M42 76 Q55 88 68 76"
-        stroke="#3b2314"
+        d="M54 98 Q66 108 78 98"
+        stroke="#2c1810"
         strokeWidth="3"
         fill="none"
         strokeLinecap="round"
@@ -51,44 +56,78 @@ export function BoxMascot({
 
   return (
     <svg
-      viewBox="0 0 110 124"
+      viewBox="0 0 132 140"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden
     >
-      {/* Sombra */}
-      <ellipse cx="55" cy="116" rx="38" ry="5.5" fill="#3b2314" fillOpacity="0.22" />
+      <defs>
+        <linearGradient id="cmTop" x1="24" y1="14" x2="110" y2="52" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#f4dbb8" />
+          <stop offset="1" stopColor="#e5c39b" />
+        </linearGradient>
+        <linearGradient id="cmSide" x1="16" y1="48" x2="42" y2="128" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#d0a676" />
+          <stop offset="1" stopColor="#bc9160" />
+        </linearGradient>
+        <linearGradient id="cmFace" x1="40" y1="52" x2="118" y2="128" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#f0d2aa" />
+          <stop offset="1" stopColor="#e0ba8a" />
+        </linearGradient>
+      </defs>
 
-      {/* Cuerpo — perspectiva isométrica de caja cerrada */}
-      {/* Tapa / cara superior */}
-      <path d="M18 40 L55 20 L92 40 L55 60 Z" fill="#d4a574" />
-      {/* Cara izquierda */}
-      <path d="M18 40 L18 86 L55 106 L55 60 Z" fill="#a67c52" />
-      {/* Cara derecha */}
-      <path d="M55 60 L55 106 L92 86 L92 40 Z" fill="#c4956a" />
+      <ellipse cx="66" cy="130" rx="42" ry="5.5" fill="#3b2314" fillOpacity="0.18" />
 
-      {/* Solapas / pliegues de cartón */}
-      <path d="M18 40 L55 60 L92 40" stroke="#8b5e3c" strokeWidth="1.2" fill="none" />
-      <path d="M36.5 30 L36.5 50" stroke="#8b5e3c" strokeWidth="1" strokeOpacity="0.55" />
-      <path d="M73.5 30 L73.5 50" stroke="#8b5e3c" strokeWidth="1" strokeOpacity="0.55" />
+      {/* Caja 3/4 — proporciones cercanas a la ref */}
+      <path
+        d="M26 48 L70 20 L114 48 L70 76 Z"
+        fill="url(#cmTop)"
+        stroke="#2c1810"
+        strokeWidth="2.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M26 48 L26 104 L70 132 L70 76 Z"
+        fill="url(#cmSide)"
+        stroke="#2c1810"
+        strokeWidth="2.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M70 76 L70 132 L114 104 L114 48 Z"
+        fill="url(#cmFace)"
+        stroke="#2c1810"
+        strokeWidth="2.8"
+        strokeLinejoin="round"
+      />
 
-      {/* Cinta de embalar (beige translúcida) */}
-      <path d="M50 24 L50 98" stroke="#e8d5b5" strokeWidth="9" strokeOpacity="0.85" strokeLinecap="butt" />
-      <path d="M26 50 L84 50" stroke="#e8d5b5" strokeWidth="9" strokeOpacity="0.85" strokeLinecap="butt" />
-      <path d="M50 24 L50 98" stroke="#c4a882" strokeWidth="1" strokeOpacity="0.5" />
-      <path d="M26 50 L84 50" stroke="#c4a882" strokeWidth="1" strokeOpacity="0.5" />
+      {/* Solapa */}
+      <path d="M48 34 L70 48 L92 34" stroke="#2c1810" strokeWidth="1.7" fill="none" strokeLinecap="round" />
 
-      {/* Etiqueta de envío */}
-      <rect x="62" y="68" width="22" height="16" rx="1.5" fill="#f5f0e6" stroke="#8b5e3c" strokeWidth="0.8" />
-      <path d="M65 73 H81 M65 77 H78 M65 81 H75" stroke="#a67c52" strokeWidth="1.2" strokeLinecap="round" />
+      {/* Cinta embalar */}
+      <path
+        d="M60 28 L70 34 L80 28 L80 52 L70 58 L60 52 Z"
+        fill="#8b5e3c"
+        stroke="#2c1810"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M60 52 L60 64 L70 70 L80 64 L80 52 L70 58 Z"
+        fill="#6f4a30"
+        stroke="#2c1810"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
 
-      {/* Cara */}
-      <g>{eyes}{mouth}</g>
-
-      {/* Mejillas suave */}
-      <circle cx="28" cy="72" r="4.5" fill="#c45c3a" fillOpacity="0.35" />
-      <circle cx="82" cy="72" r="4.5" fill="#c45c3a" fillOpacity="0.35" />
+      {/* Cara sobre el panel frontal (derecha) */}
+      <g transform="translate(22 8)">
+        {eyes}
+        <circle cx="38" cy="92" r="6" fill="#f0a07a" fillOpacity="0.55" />
+        <circle cx="94" cy="92" r="6" fill="#f0a07a" fillOpacity="0.55" />
+        {mouth}
+      </g>
     </svg>
   );
 }
