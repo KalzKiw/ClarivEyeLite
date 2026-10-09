@@ -1,24 +1,65 @@
 import { FREE_OPEN_LIMIT } from "@clariveye-lite/domain";
-import { Check, X } from "lucide-react";
+import { Check, Minus, Package, Sparkles, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { UpgradeArt } from "@/components/UpgradeArt";
+import { BoxMascot } from "@/components/BoxMascot";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
 import { savePlan } from "@/lib/store";
 
 type Billing = "monthly" | "annual";
 
+const FREE_FEATURES: Array<{ ok: boolean; label: string }> = [
+  { ok: true, label: `Hasta ${FREE_OPEN_LIMIT} pedidos abiertos` },
+  { ok: true, label: "1 usuario (dueño)" },
+  { ok: true, label: "ClarivScan básico" },
+  { ok: false, label: "Equipo / operarios" },
+  { ok: false, label: "Cupo ilimitado" },
+  { ok: false, label: "Prioridad de soporte" },
+];
+
+const PRO_FEATURES: Array<{ ok: boolean; label: string }> = [
+  { ok: true, label: "Pedidos abiertos ilimitados" },
+  { ok: true, label: "Hasta 3 usuarios" },
+  { ok: true, label: "ClarivScan sin freno" },
+  { ok: true, label: "Equipo / operarios" },
+  { ok: true, label: "Perfiles de lectura por negocio" },
+  { ok: true, label: "Soporte prioritario (demo)" },
+];
+
 const PRICE = {
-  monthly: { label: "29 €/mes", hint: "Sin permanencia" },
-  annual: { label: "19 €/mes", hint: "228 €/año · ahorras 34%" },
+  monthly: { amount: 29, period: "mes", note: "Sin permanencia", billed: "29 € cada mes" },
+  annual: { amount: 19, period: "mes", note: "Ahorras 120 €/año", billed: "228 € facturados al año" },
 };
 
-const PRO_BULLETS = [
-  "Pedidos abiertos ilimitados",
-  "Hasta 3 usuarios en el equipo",
-  "ClarivScan sin tope de cupo",
-];
+function FeatureRow({ ok, label, onDark }: { ok: boolean; label: string; onDark?: boolean }) {
+  return (
+    <li className="flex items-start gap-2.5 text-[13px] leading-snug">
+      <span
+        className={cn(
+          "mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full",
+          ok
+            ? onDark
+              ? "bg-white/20 text-white"
+              : "bg-violet-100 text-violet-700"
+            : onDark
+              ? "bg-white/10 text-white/40"
+              : "bg-zinc-100 text-zinc-400",
+        )}
+      >
+        {ok ? <Check size={11} strokeWidth={3} /> : <Minus size={11} strokeWidth={2.5} />}
+      </span>
+      <span
+        className={cn(
+          ok ? "font-medium" : "line-through decoration-1",
+          onDark ? (ok ? "text-white" : "text-white/40") : ok ? "text-zinc-800" : "text-zinc-400",
+        )}
+      >
+        {label}
+      </span>
+    </li>
+  );
+}
 
 export function UpgradeModal({
   open,
@@ -58,126 +99,202 @@ export function UpgradeModal({
     onClose();
   }
 
-  const used = typeof openCount === "number" ? openCount : FREE_OPEN_LIMIT;
   const price = PRICE[billing];
+  const used = typeof openCount === "number" ? openCount : FREE_OPEN_LIMIT;
+  const fill = Math.min(100, (used / FREE_OPEN_LIMIT) * 100);
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-5"
+      className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="upgrade-title"
     >
       <button
         type="button"
-        className="absolute inset-0 bg-[#1a0b2e]/75 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-[#1e1035]/70 backdrop-blur-sm"
         aria-label="Cerrar"
         onClick={onClose}
       />
 
-      {/* Popup estilo banner horizontal */}
-      <div
-        className="relative z-10 mx-0 flex w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl shadow-2xl shadow-violet-950/50 sm:mx-auto sm:flex-row sm:rounded-3xl"
-        style={{ background: "linear-gradient(118deg, #5b21b6 0%, #6d28d9 48%, #7e22ce 100%)" }}
-      >
-        {/* Círculos de fondo */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-          <div className="absolute -left-16 -top-20 size-64 rounded-full bg-[#4c1d95]/80" />
-          <div className="absolute -bottom-24 left-8 size-72 rounded-full bg-[#4c1d95]/55" />
-          <div className="absolute -right-10 top-1/3 size-48 rounded-full bg-[#86198f]/25 blur-2xl" />
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute right-3 top-3 z-20 rounded-full p-2 text-white/90 transition hover:bg-white/15"
-          aria-label="Cerrar"
+      <div className="relative z-10 flex max-h-[96dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:rounded-3xl">
+        {/* Cabecera pricing */}
+        <div
+          className="relative shrink-0 overflow-hidden px-5 pb-5 pt-5 sm:px-7 sm:pt-6"
+          style={{
+            background: "linear-gradient(135deg, #4c1d95 0%, #6d28d9 42%, #a21caf 100%)",
+          }}
         >
-          <X size={20} strokeWidth={2.5} />
-        </button>
+          <div
+            className="pointer-events-none absolute inset-0 opacity-30"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 12% 80%, #f0abfc 0%, transparent 40%), radial-gradient(circle at 90% 10%, #c4b5fd 0%, transparent 35%)",
+            }}
+            aria-hidden
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 z-20 rounded-full bg-white/15 p-2 text-white transition hover:bg-white/25"
+            aria-label="Cerrar"
+          >
+            <X size={18} />
+          </button>
 
-        {/* Izquierda — ilustración */}
-        <div className="relative flex min-h-[200px] items-end justify-center px-4 pt-8 sm:w-[42%] sm:min-h-[340px] sm:items-center sm:pt-6">
-          <UpgradeArt className="h-[210px] w-auto drop-shadow-xl sm:h-[280px]" />
+          <div className="relative flex items-start gap-3 pr-10 sm:gap-4">
+            <BoxMascot mood="wow" className="h-[72px] w-[66px] shrink-0 drop-shadow-lg sm:h-[88px] sm:w-[80px]" />
+            <div className="min-w-0 flex-1">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+                <Package size={12} />
+                Planes ClarivEye
+              </div>
+              <h2
+                id="upgrade-title"
+                className="font-display mt-2 text-[1.55rem] font-semibold leading-tight tracking-tight text-white sm:text-3xl"
+              >
+                Elige Free o Pro
+              </h2>
+              <p className="mt-1.5 max-w-md text-sm leading-relaxed text-white/90">
+                Cupo Free lleno. Compara y desbloquea la salida sin tope.
+              </p>
+              <div className="mt-4 max-w-xs">
+                <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-white/85">
+                  <span>Pedidos abiertos</span>
+                  <span>
+                    {used}/{FREE_OPEN_LIMIT}
+                  </span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-black/25">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#fce7f3] to-[#f0abfc] transition-all duration-500"
+                    style={{ width: `${fill}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Derecha — copy + CTA */}
-        <div className="relative flex flex-1 flex-col justify-center px-6 pb-8 pt-2 sm:px-8 sm:py-10 sm:pr-12">
-          <p className="text-sm font-semibold text-white/90">
-            ¡Espera! No frenes la salida
-            {used >= FREE_OPEN_LIMIT ? ` · ${used}/${FREE_OPEN_LIMIT} abiertos` : ""}
-          </p>
-          <h2
-            id="upgrade-title"
-            className="font-display mt-2 text-[1.65rem] font-bold leading-[1.15] tracking-tight text-white sm:text-[1.85rem]"
-          >
-            Pasa a Pro y sigue escaneando sin límite de pedidos
-          </h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-white/80">
-            Free llega hasta {FREE_OPEN_LIMIT} pedidos abiertos. Con Pro desbloqueas cupo ilimitado y
-            equipo — en menos de un minuto.
-          </p>
-
-          <ul className="mt-4 space-y-2">
-            {PRO_BULLETS.map((b) => (
-              <li key={b} className="flex items-center gap-2 text-sm font-medium text-white">
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-white/20">
-                  <Check size={12} strokeWidth={3} className="text-white" />
+        <div className="overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
+          <div className="mb-5 flex flex-col items-center gap-2">
+            <div
+              className="inline-flex rounded-full border border-violet-200 bg-white p-1 shadow-sm"
+              role="group"
+              aria-label="Periodo de facturación"
+            >
+              <button
+                type="button"
+                onClick={() => setBilling("monthly")}
+                className={cn(
+                  "rounded-full px-5 py-2 text-xs font-bold transition",
+                  billing === "monthly"
+                    ? "bg-zinc-900 text-white shadow"
+                    : "text-zinc-600 hover:text-zinc-900",
+                )}
+              >
+                Mensual
+              </button>
+              <button
+                type="button"
+                onClick={() => setBilling("annual")}
+                className={cn(
+                  "rounded-full px-5 py-2 text-xs font-bold transition",
+                  billing === "annual"
+                    ? "bg-violet-700 text-white shadow"
+                    : "text-zinc-600 hover:text-zinc-900",
+                )}
+              >
+                Anual
+                <span
+                  className={cn(
+                    "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold",
+                    billing === "annual" ? "bg-fuchsia-200 text-fuchsia-900" : "bg-violet-100 text-violet-700",
+                  )}
+                >
+                  −34%
                 </span>
-                {b}
-              </li>
-            ))}
-          </ul>
-
-          {/* Toggle facturación */}
-          <div className="mt-5 inline-flex self-start rounded-full bg-black/25 p-1">
-            <button
-              type="button"
-              onClick={() => setBilling("monthly")}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-xs font-bold transition",
-                billing === "monthly" ? "bg-white text-violet-900" : "text-white/75 hover:text-white",
-              )}
-            >
-              Mensual
-            </button>
-            <button
-              type="button"
-              onClick={() => setBilling("annual")}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-xs font-bold transition",
-                billing === "annual" ? "bg-white text-violet-900" : "text-white/75 hover:text-white",
-              )}
-            >
-              Anual · {PRICE.annual.label}
-            </button>
+              </button>
+            </div>
+            <p className="text-[11px] font-medium text-zinc-500">{price.billed}</p>
           </div>
-          <p className="mt-1.5 text-xs font-medium text-white/70">
-            {price.label} · {price.hint}
-          </p>
 
-          {isOwner ? (
-            <button
-              type="button"
-              onClick={goPro}
-              className="mt-5 w-full max-w-xs rounded-full bg-[#e11d48] px-6 py-3.5 text-sm font-extrabold uppercase tracking-wide text-white shadow-lg shadow-rose-950/30 transition active:scale-[0.98] hover:bg-[#be123c] sm:w-auto"
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Free</p>
+              <p className="font-display mt-2 text-4xl font-semibold tracking-tight text-zinc-900">
+                0 €
+                <span className="text-base font-semibold text-zinc-500"> /siempre</span>
+              </p>
+              <p className="mt-1 text-sm font-medium text-zinc-600">Ideal para probar el picking</p>
+              <ul className="mt-5 flex-1 space-y-3">
+                {FREE_FEATURES.map((f) => (
+                  <FeatureRow key={f.label} ok={f.ok} label={f.label} />
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-6 w-full rounded-xl border-2 border-zinc-200 bg-zinc-50 py-3 text-sm font-bold text-zinc-800 transition hover:border-zinc-300 hover:bg-white"
+              >
+                Seguir en Free
+              </button>
+            </div>
+
+            <div
+              className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-violet-600 p-5 shadow-lg shadow-violet-900/15"
+              style={{
+                background: "linear-gradient(165deg, #5b21b6 0%, #6d28d9 55%, #86198f 100%)",
+              }}
             >
-              Activar Pro ahora
-            </button>
-          ) : (
-            <p className="mt-5 rounded-xl bg-black/25 px-4 py-3 text-sm font-medium text-white">
-              Pide al dueño que active Pro en Ajustes.
-            </p>
-          )}
+              <div
+                className="pointer-events-none absolute -right-10 top-0 size-40 rounded-full bg-fuchsia-400/25 blur-3xl"
+                aria-hidden
+              />
+              <div className="relative flex items-center justify-between gap-2">
+                <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">Pro</p>
+                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-violet-800">
+                  <Sparkles size={11} />
+                  Recomendado
+                </span>
+              </div>
+              <p className="font-display relative mt-2 text-4xl font-semibold tracking-tight text-white">
+                {price.amount} €
+                <span className="text-base font-semibold text-white/85"> /{price.period}</span>
+              </p>
+              <p className="relative mt-1 text-sm font-semibold text-fuchsia-100">{price.note}</p>
+              <ul className="relative mt-5 flex-1 space-y-3">
+                {PRO_FEATURES.map((f) => (
+                  <FeatureRow key={f.label} ok={f.ok} label={f.label} onDark />
+                ))}
+              </ul>
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={goPro}
+                  className="relative mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-extrabold text-violet-900 shadow-md transition active:scale-[0.98] hover:bg-fuchsia-50"
+                >
+                  <Zap size={16} fill="currentColor" />
+                  Activar Pro {billing === "annual" ? "anual" : "mensual"}
+                </button>
+              ) : (
+                <p className="relative mt-6 rounded-xl bg-black/20 px-3 py-2.5 text-center text-xs font-semibold text-white">
+                  Pide al dueño del negocio que active Pro en Ajustes.
+                </p>
+              )}
+            </div>
+          </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-white/65">
-            <button type="button" onClick={onClose} className="hover:text-white hover:underline">
-              Seguir en Free
-            </button>
-            <Link to="/ajustes" onClick={onClose} className="hover:text-white hover:underline">
-              Ver planes en Ajustes
+          <p className="mt-5 text-center text-[11px] font-medium text-zinc-500">
+            Demo local · sin cobro real todavía ·{" "}
+            <Link
+              to="/ajustes"
+              onClick={onClose}
+              className="font-bold text-violet-700 underline-offset-2 hover:underline"
+            >
+              Ir a Ajustes
             </Link>
-          </div>
+          </p>
         </div>
       </div>
     </div>
