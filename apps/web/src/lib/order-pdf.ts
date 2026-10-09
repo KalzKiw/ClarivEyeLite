@@ -79,17 +79,17 @@ function drawPageFooters(doc: jsPDF) {
 }
 
 function drawSignatures(doc: jsPDF, y: number): number {
-  const need = 42;
+  const need = 28;
   if (y + need > FOOTER_Y - 8) {
     doc.addPage();
     y = MARGIN + 6;
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(...INK);
   doc.text("Conformidad", MARGIN, y);
-  y += 6;
+  y += 4;
 
   const colW = (CONTENT_RIGHT - MARGIN - 8) / 2;
   const leftX = MARGIN;
@@ -100,21 +100,20 @@ function drawSignatures(doc: jsPDF, y: number): number {
     [rightX, "Receptor"] as const,
   ]) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
+    doc.setTextColor(...INK);
     doc.text(label, x, y);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
+    doc.setFontSize(6.5);
     doc.setTextColor(...MUTED);
-    doc.text("Nombre / firma", x, y + 5);
+    doc.text("Nombre / firma", x, y + 3.5);
     doc.setDrawColor(160, 160, 170);
     doc.setLineWidth(0.3);
-    doc.line(x, y + 22, x + colW, y + 22);
-    doc.setTextColor(...MUTED);
-    doc.text("Fecha _______________", x, y + 28);
-    doc.setTextColor(...INK);
+    doc.line(x, y + 14, x + colW, y + 14);
+    doc.text("Fecha _______________", x, y + 18);
   }
 
-  return y + 34;
+  return y + 22;
 }
 
 function ensureY(doc: jsPDF, y: number, need: number): number {
@@ -140,43 +139,11 @@ async function loadLogoDataUrl(): Promise<string | null> {
   }
 }
 
-function drawTotalsBox(
-  doc: jsPDF,
-  y: number,
-  rows: Array<{ label: string; value: string; emphasize?: boolean }>,
-): number {
-  const boxW = 78;
-  const rowH = 8;
-  const padX = 5;
-  const padY = 4;
-  const boxH = padY * 2 + rows.length * rowH;
-  const boxX = CONTENT_RIGHT - boxW;
-
-  doc.setFillColor(250, 250, 252);
-  doc.setDrawColor(220, 220, 225);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(boxX, y, boxW, boxH, 2, 2, "FD");
-
-  rows.forEach((row, i) => {
-    const rowMidY = y + padY + i * rowH + rowH / 2 + 1.2;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text(row.label, boxX + padX, rowMidY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(row.emphasize ? 10 : 9);
-    doc.setTextColor(...(row.emphasize ? PRIMARY : INK));
-    doc.text(row.value, boxX + boxW - padX, rowMidY, { align: "right" });
-  });
-
-  return y + boxH + 6;
-}
-
 /** PDF A4: orden de picking + comprobante del pedido. */
 export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   const token = encodeOrderToken(order.id);
-  const barcodeImg = code128DataUrl(token, 48);
-  const qrImg = await qrDataUrl(token, 110);
+  const barcodeImg = code128DataUrl(token, 40);
+  const qrImg = await qrDataUrl(token, 96);
   const logoImg = await loadLogoDataUrl();
   const businessName = opts?.businessName?.trim() || "Negocio";
   const printedAt = fmtDate(new Date().toISOString());
@@ -193,119 +160,82 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   let y = MARGIN;
 
-  // —— Cabecera (sin franja azul: ahorro de tinta; el azul solo en tablas) ——
-  const logoSize = 22;
+  // —— Cabecera compacta (sin franja azul) ——
+  const logoSize = 16;
   let textLeft = MARGIN;
   if (logoImg) {
-    // Logo oficial ClarivEye (caja + wordmark) sobre blanco
-    doc.addImage(logoImg, "PNG", MARGIN, y - 2, logoSize, logoSize);
-    textLeft = MARGIN + logoSize + 5;
+    doc.addImage(logoImg, "PNG", MARGIN, y - 1, logoSize, logoSize);
+    textLeft = MARGIN + logoSize + 4;
   }
 
-  // El PNG ya lleva “CLARIVEYE”; al lado solo producto + tipo de doc
   doc.setTextColor(...PRIMARY);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("Lite", textLeft, y + 5);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
-  doc.text("Orden de picking / Comprobante", textLeft, y + 11);
-  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(...INK);
-  doc.text(businessName, CONTENT_RIGHT, y + 5, { align: "right" });
+  doc.text("Lite", textLeft, y + 4);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
-  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, y + 11, { align: "right" });
+  doc.text("Orden de picking / Comprobante", textLeft, y + 9);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...INK);
+  doc.text(businessName, CONTENT_RIGHT, y + 4, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, y + 9, { align: "right" });
 
-  y = MARGIN + logoSize + 4;
+  y = MARGIN + logoSize + 2;
   doc.setDrawColor(210, 210, 215);
-  doc.setLineWidth(0.35);
+  doc.setLineWidth(0.3);
   doc.line(MARGIN, y, CONTENT_RIGHT, y);
-  y += 8;
+  y += 6;
+
+  // Doc + meta + resumen en texto (sin KPIs)
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(14);
   doc.text(order.docNumber, MARGIN, y);
-  y += 6;
-  doc.setFontSize(9);
+  y += 5;
+  doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...MUTED);
   const metaBits = [
-    `Estado: ${ORDER_STATUS_LABEL[order.status]}`,
-    `Alta: ${fmtDate(order.createdAt)}`,
+    ORDER_STATUS_LABEL[order.status],
+    `Alta ${fmtDate(order.createdAt)}`,
+    `${order.lines.length} líneas`,
+    `${totalQty} uds`,
+    `${totalPkg} bultos`,
+    `${pickedCount}/${order.lines.length} prep.`,
   ];
-  if (order.docDate) metaBits.push(`Doc.: ${order.docDate}`);
-  if (order.deliveredAt) metaBits.push(`Entrega: ${fmtDate(order.deliveredAt)}`);
+  if (order.docDate) metaBits.splice(1, 0, `Doc. ${order.docDate}`);
+  if (hasPrices && totalAmount !== null) metaBits.push(fmtMoney(totalAmount));
   doc.text(metaBits.join("  ·  "), MARGIN, y);
-  y += 5;
+  y += 4;
   if (order.notes?.trim()) {
     doc.setTextColor(...INK);
     doc.setFont("helvetica", "italic");
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     const noteLines = doc.splitTextToSize(`Notas: ${order.notes.trim()}`, CONTENT_RIGHT - MARGIN);
     doc.text(noteLines, MARGIN, y);
-    y += noteLines.length * 3.5 + 2;
+    y += noteLines.length * 3.2 + 1;
     doc.setFont("helvetica", "normal");
   }
 
-  // —— Códigos escaneables ——
-  y = Math.max(y + 2, 52);
+  // —— Códigos escaneables (compactos) ——
+  y += 2;
+  const codeH = 28;
   doc.setDrawColor(230, 230, 235);
-  doc.setFillColor(250, 250, 252);
-  doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, 48, 2, 2, "FD");
-
-  doc.addImage(barcodeImg, "PNG", MARGIN + 4, y + 6, 100, 16);
-  doc.setFontSize(7);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, codeH, 1.5, 1.5, "S");
+  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 4, 95, 12);
+  doc.setFontSize(6.5);
   doc.setTextColor(...MUTED);
-  doc.text(token, MARGIN + 4, y + 28);
-  doc.setTextColor(...INK);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.text(order.docNumber, MARGIN + 4, y + 34);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7);
-  doc.setTextColor(...MUTED);
-  doc.text("Escanea CEL1 o el QR para abrir en Picking", MARGIN + 4, y + 40);
+  doc.text(`${token}  ·  Escanea CEL1 / QR → Picking`, MARGIN + 3, y + 22);
+  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 30, y + 2, 24, 24);
+  y += codeH + 5;
 
-  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 44, y + 4, 40, 40);
-
-  y += 54;
-
-  // —— Resumen ——
-  const boxW = (CONTENT_RIGHT - MARGIN - 9) / 4;
-  const summary = [
-    { label: "Líneas", value: String(order.lines.length) },
-    { label: "Unidades", value: String(totalQty) },
-    { label: "Bultos", value: String(totalPkg) },
-    { label: "Preparadas", value: `${pickedCount}/${order.lines.length}` },
-  ];
-  summary.forEach((item, i) => {
-    const x = MARGIN + i * (boxW + 3);
-    doc.setFillColor(245, 247, 255);
-    doc.setDrawColor(...PRIMARY);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y, boxW, 14, 1.5, 1.5, "FD");
-    doc.setFontSize(7);
-    doc.setTextColor(...MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.text(item.label, x + boxW / 2, y + 5, { align: "center" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(...INK);
-    doc.text(item.value, x + boxW / 2, y + 11, { align: "center" });
-  });
-  y += 20;
-
-  // —— Tabla ——
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...INK);
-  doc.text("Líneas del pedido", MARGIN, y);
-  y += 3;
-
+  // —— Tabla (empieza pronto; sin título grande ni KPIs) ——
   autoTable(doc, {
     startY: y,
     head: [["", "#", "Ref", "Descripción", "Ud", "Bultos", "P.unit", "Importe", "Código"]],
@@ -324,24 +254,24 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
         line.barcode || line.reference,
       ];
     }),
-    styles: { fontSize: 7.5, cellPadding: 1.6, textColor: INK, overflow: "linebreak" },
+    styles: { fontSize: 7, cellPadding: 1.1, textColor: INK, overflow: "linebreak" },
     headStyles: {
       fillColor: PRIMARY,
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 7.5,
+      fontSize: 7,
     },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
       0: { cellWidth: 7, halign: "center" },
-      1: { cellWidth: 7, halign: "center" },
+      1: { cellWidth: 6, halign: "center" },
       2: { cellWidth: 24 },
-      3: { cellWidth: 42 },
+      3: { cellWidth: 44 },
       4: { cellWidth: 10, halign: "right" },
       5: { cellWidth: 12, halign: "right" },
       6: { cellWidth: 18, halign: "right" },
       7: { cellWidth: 20, halign: "right" },
-      8: { cellWidth: 22 },
+      8: { cellWidth: 21 },
     },
     didParseCell(data) {
       if (data.section !== "body") return;
@@ -353,59 +283,58 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
     margin: { left: MARGIN, right: MARGIN },
   });
 
-  y = lastTableY(doc) + 8;
+  y = lastTableY(doc) + 4;
 
-  // —— Totales (etiqueta izq + valor dcha, filas alineadas) ——
-  const totalRows: Array<{ label: string; value: string; emphasize?: boolean }> = [
-    { label: "Total unidades", value: String(totalQty) },
-    { label: "Total bultos", value: String(totalPkg) },
-  ];
-  if (hasPrices && totalAmount !== null) {
-    totalRows.push({ label: "Importe", value: fmtMoney(totalAmount), emphasize: true });
-  }
-  y = ensureY(doc, y, 8 + totalRows.length * 8 + 10);
-  y = drawTotalsBox(doc, y, totalRows);
+  // Totales en una sola línea (sin caja KPI)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...INK);
+  const totalLine = [
+    `Total: ${totalQty} uds`,
+    `${totalPkg} bultos`,
+    hasPrices && totalAmount !== null ? fmtMoney(totalAmount) : null,
+  ]
+    .filter(Boolean)
+    .join("  ·  ");
+  doc.text(totalLine, CONTENT_RIGHT, y, { align: "right" });
+  y += 6;
 
-  // —— Anexo barcodes compacto ——
+  // —— Anexo barcodes (filas más densas) ——
   if (order.lines.length > 0) {
-    y = ensureY(doc, y, 20);
+    y = ensureY(doc, y, 14);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setTextColor(...INK);
-    doc.text("Picking rápido — barcodes de línea", MARGIN, y);
-    y += 5;
+    doc.text("Picking rápido", MARGIN, y);
+    y += 3.5;
     doc.setFont("helvetica", "normal");
 
     for (const line of order.lines) {
       const value = (line.barcode || line.reference).trim();
-      y = ensureY(doc, y, 16);
-      // Fila: checkbox + ref/qty + barcode
-      doc.setFontSize(9);
+      y = ensureY(doc, y, 11);
+      doc.setFontSize(7.5);
       doc.setTextColor(...INK);
-      doc.text(`${checkbox(line.picked)}  ${line.reference}  ·  x${line.quantity}`, MARGIN, y + 3);
-      doc.setFontSize(7);
-      doc.setTextColor(...MUTED);
-      const desc = (line.name || "").slice(0, 40);
-      if (desc) doc.text(desc, MARGIN + 2, y + 7);
-
+      doc.text(
+        `${checkbox(line.picked)} ${line.reference} · x${line.quantity}${line.name ? ` · ${line.name.slice(0, 28)}` : ""}`,
+        MARGIN,
+        y + 2.5,
+      );
       if (value) {
         try {
-          const img = code128DataUrl(value, 22);
-          doc.addImage(img, "PNG", 110, y - 1, 72, 9);
-          doc.setFontSize(6);
-          doc.text(value, 110, y + 11);
+          const img = code128DataUrl(value, 18);
+          doc.addImage(img, "PNG", 118, y - 1, 64, 7);
         } catch {
-          doc.setFontSize(7);
+          doc.setFontSize(6.5);
           doc.setTextColor(...MUTED);
-          doc.text(value, 110, y + 4);
+          doc.text(value, 118, y + 2.5);
         }
       }
-      y += 15;
+      y += 10;
     }
   }
 
   // —— Firmas ——
-  y = drawSignatures(doc, y + 4);
+  y = drawSignatures(doc, y + 2);
 
   if (order.deliveryNotes?.trim()) {
     y = ensureY(doc, y, 12);
