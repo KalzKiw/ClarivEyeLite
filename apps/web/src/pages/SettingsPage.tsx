@@ -3,10 +3,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
+import { loadScanStats } from "@/lib/scan-stats";
 import { loadPlan, savePlan, type Plan } from "@/lib/store";
 
 export function SettingsPage() {
   const { user, business, users, renameBusiness, changePassword, logout } = useAuth();
+  const scanStats = loadScanStats();
   const [plan, setPlan] = useState<Plan>(loadPlan());
   const [bizName, setBizName] = useState(business?.name ?? "");
   const [bizMsg, setBizMsg] = useState("");
@@ -92,6 +94,13 @@ export function SettingsPage() {
         )}
         <p className="text-xs text-muted-foreground">
           Sesión: {user?.name} · {user?.email} ({user?.role})
+        </p>
+      </Card>
+
+      <Card className="space-y-2">
+        <p className="text-sm font-medium">Lecturas ClarivScan</p>
+        <p className="text-xs text-muted-foreground">
+          Ok {scanStats.ok} · asistidas {scanStats.assisted} · fallos {scanStats.fail}
         </p>
       </Card>
 

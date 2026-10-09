@@ -10,6 +10,7 @@ export type PdfTextItem = {
   x: number;
   y: number;
   width?: number;
+  height?: number;
 };
 
 export type PdfLayoutResult = {
@@ -21,6 +22,13 @@ export type PdfLayoutResult = {
 };
 
 type Placed = PdfTextItem & { str: string };
+
+function median(nums: number[]): number {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
 
 function clusterByY(items: Placed[], yTolerance: number): Placed[][] {
   if (!items.length) return [];
@@ -55,15 +63,37 @@ function joinRow(row: Placed[]): string {
   return out.replace(/[ \t]+/g, " ").trim();
 }
 
-/** Cortes de columna por cuantiles de X (izq=sku, mid=desc, der=nums). */
+/** Cortes de columna: gaps grandes en X; fallback cuantiles. */
+function findColumnCuts(xs: number[]): [number, number] {
+  if (xs.length < 4) {
+    const sortedX = [...xs].sort((a, b) => a - b);
+    const q1 = sortedX[Math.floor(sortedX.length * 0.28)] ?? sortedX[0] ?? 0;
+    const q2 = sortedX[Math.floor(sortedX.length * 0.72)] ?? sortedX[sortedX.length - 1] ?? 1;
+    return [q1, q2];
+  }
+  const uniq = [...new Set(xs.map((x) => Math.round(x * 10) / 10))].sort((a, b) => a - b);
+  const gaps: Array<{ mid: number; gap: number }> = [];
+  for (let i = 1; i < uniq.length; i++) {
+    gaps.push({ mid: (uniq[i - 1] + uniq[i]) / 2, gap: uniq[i] - uniq[i - 1] });
+  }
+  gaps.sort((a, b) => b.gap - a.gap);
+  const top = gaps.slice(0, 2).sort((a, b) => a.mid - b.mid);
+  if (top.length >= 2 && top[0].gap > 8 && top[1].gap > 8) {
+    return [top[0].mid, top[1].mid];
+  }
+  const sortedX = [...xs].sort((a, b) => a - b);
+  return [
+    sortedX[Math.floor(sortedX.length * 0.28)] ?? 0,
+    sortedX[Math.floor(sortedX.length * 0.72)] ?? 1,
+  ];
+}
+
 function splitColumns(rows: Placed[][]): { sku: string[]; desc: string[]; nums: string[] } {
   const xs = rows.flat().map((i) => i.x);
   if (xs.length < 3) {
     return { sku: [], desc: rows.map(joinRow).filter(Boolean), nums: [] };
   }
-  const sortedX = [...xs].sort((a, b) => a - b);
-  const q1 = sortedX[Math.floor(sortedX.length * 0.28)] ?? sortedX[0];
-  const q2 = sortedX[Math.floor(sortedX.length * 0.72)] ?? sortedX[sortedX.length - 1];
+  const [q1, q2] = findColumnCuts(xs);
 
   const sku: string[] = [];
   const desc: string[] = [];
@@ -81,13 +111,43 @@ function splitColumns(rows: Placed[][]): { sku: string[]; desc: string[]; nums: 
     const s = joinRow(left);
     const d = joinRow(mid);
     const n = joinRow(right);
-    // Filas de tabla: saltar cabeceras sueltas
     if (!s && !d && !n) continue;
     sku.push(s);
     desc.push(d);
     nums.push(n);
   }
   return { sku, desc, nums };
+}
+
+/**
+ * Detecta inicio de tabla por espaciado Y repetido (filas de productos).
+ * Devuelve índice de fila donde empieza el cuerpo.
+ */
+export function detectTableStart(rows: Placed[][]): number {
+  if (rows.length < 4) return Math.max(1, Math.floor(rows.length * 0.15));
+  const centers = rows.map((r) => median(r.map((i) => i.y)));
+  const gaps: number[] = [];
+  for (let i = 1; i < centers.length; i++) {
+    gaps.push(Math.abs(centers[i - 1] - centers[i]));
+  }
+  const medGap = median(gaps.filter((g) => g > 0.5));
+  if (!medGap) return Math.max(1, Math.floor(rows.length * 0.22));
+
+  // Busca la primera racha de ≥3 gaps ≈ mediana (tabla)
+  let streak = 0;
+  let start = Math.max(1, Math.floor(rows.length * 0.1));
+  for (let i = 0; i < gaps.length; i++) {
+    if (Math.abs(gaps[i] - medGap) / medGap < 0.45) {
+      streak += 1;
+      if (streak >= 3) {
+        start = Math.max(0, i - streak + 1);
+        break;
+      }
+    } else {
+      streak = 0;
+    }
+  }
+  return Math.min(start, Math.floor(rows.length * 0.45));
 }
 
 /**
@@ -109,16 +169,19 @@ export function layoutPdfItems(
     };
   }
 
+  const heights = placed.map((i) => i.height).filter((h): h is number => typeof h === "number" && h > 0);
+  const medH = median(heights);
   const ys = placed.map((i) => i.y);
   const ySpan = Math.max(...ys) - Math.min(...ys);
-  const yTolerance = opts?.yTolerance ?? Math.max(3, Math.min(12, ySpan * 0.012));
+  const yTolerance =
+    opts?.yTolerance ??
+    (medH > 0 ? Math.max(medH * 0.55, 2) : Math.max(3, Math.min(12, ySpan * 0.012)));
 
   const rows = clusterByY(placed, yTolerance);
   const lines = rows.map(joinRow).filter(Boolean);
   const text = lines.join("\n");
 
-  // Cabecera ≈ primer 22% de filas
-  const headerCut = Math.max(1, Math.floor(lines.length * 0.22));
+  const headerCut = detectTableStart(rows);
   const headerText = lines.slice(0, headerCut).join("\n");
   const bodyRows = rows.slice(headerCut);
   const cols = splitColumns(bodyRows.length ? bodyRows : rows);

@@ -12,6 +12,7 @@ import { StepProgress } from "@/components/StepProgress";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { currentBusinessId } from "@/lib/auth";
 import { deleteDocProfile, loadDocProfiles, upsertDocProfile } from "@/lib/doc-profiles-store";
+import { takePendingTrainFile } from "@/lib/pending-train-file";
 import { isPdfFile, renderPdfPageToCanvas } from "@/lib/pdf-text";
 
 const STEPS = ["Formato", "Muestra", "SKU", "Nombre", "Cantidad", "Guardar"] as const;
@@ -43,6 +44,16 @@ export function TrainParserPage() {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
   }, [imageUrl]);
+
+  useEffect(() => {
+    const pending = takePendingTrainFile();
+    if (pending) {
+      setAlwaysSame(true);
+      setStep(2);
+      void onSample(pending);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSample(file: File | null) {
     if (!file) return;

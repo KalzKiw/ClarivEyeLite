@@ -1,4 +1,4 @@
-import { canCreateOrder } from "@clariveye-lite/domain";
+import { canCreateOrder, type AssistedCandidate } from "@clariveye-lite/domain";
 import { Camera, FileUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { ClarivBox } from "@/components/ClarivBox";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { getActiveDocProfile } from "@/lib/doc-profiles-store";
 import { recognizeDocumentStructured, type RecognizeSource } from "@/lib/ocr";
+import { setPendingTrainFile } from "@/lib/pending-train-file";
 import { createOrderFromLines, loadOrders, loadPlan, saveOrders } from "@/lib/store";
 
 interface DraftLine {
@@ -21,9 +22,9 @@ const SOURCE_LABEL: Record<RecognizeSource, string> = {
   "pdf-text": "PDF texto",
   ocr: "OCR",
   trained: "Perfil entrenado",
+  assisted: "Asistido",
 };
 
-/** Solo EAN/UPC típicos van a barcode; refs cortas (78958) no — evita choques en picking */
 function barcodeFromRef(ref: string): string {
   return /^\d{8,14}$/.test(ref.trim()) ? ref.trim() : "";
 }
@@ -39,6 +40,8 @@ export function ClarivScanPage() {
   const [docType, setDocType] = useState("");
   const [source, setSource] = useState<RecognizeSource | "">("");
   const [lastFile, setLastFile] = useState<File | null>(null);
+  const [assisted, setAssisted] = useState(false);
+  const [candidates, setCandidates] = useState<AssistedCandidate[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
 
   async function onFile(file: File | null, forceOcr = false) {
@@ -46,6 +49,8 @@ export function ClarivScanPage() {
     setLastFile(file);
     setBusy(true);
     setError("");
+    setAssisted(false);
+    setCandidates([]);
     setStatus("Preparando…");
     try {
       const parsed = await recognizeDocumentStructured(file, {
@@ -58,30 +63,41 @@ export function ClarivScanPage() {
       setDocType(`${parsed.documentType}${profileLabel}`);
       if (parsed.documentNumber) setDocNumber(parsed.documentNumber);
 
-      if (parsed.lines.length === 0) {
-        setError(
-          "No pude interpretar productos. Entrena el lector (Ajustes) o fuerza OCR / añade a mano.",
+      setAssisted(!!parsed.assisted);
+      setCandidates(parsed.candidates ?? []);
+
+      if (parsed.lines.length > 0) {
+        setLines(
+          parsed.lines.map((line) => ({
+            reference: line.reference,
+            barcode: barcodeFromRef(line.reference),
+            name: line.name ?? "",
+            quantity: line.quantity,
+            packages: line.packages,
+          })),
         );
+      } else {
         setLines([]);
-        return;
       }
 
-      setLines(
-        parsed.lines.map((line) => ({
-          reference: line.reference,
-          barcode: barcodeFromRef(line.reference),
-          name: line.name ?? "",
-          quantity: line.quantity,
-          packages: line.packages,
-        })),
-      );
-      setStatus(
-        `${parsed.lines.length} producto(s) · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
-      );
+      if (parsed.assisted) {
+        setError("");
+        setStatus(
+          `Revisa candidatos · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
+        );
+      } else if (parsed.lines.length === 0) {
+        setError("Sin productos claros. Usa candidatos, entrena o añade a mano.");
+        setStatus("");
+      } else {
+        setStatus(
+          `${parsed.lines.length} producto(s) · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
+        );
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo leer el documento");
       setStatus("");
       setSource("");
+      setAssisted(false);
     } finally {
       setBusy(false);
     }
@@ -92,6 +108,38 @@ export function ClarivScanPage() {
       ...prev,
       { reference: "", barcode: "", name: "", quantity: 1, packages: 0 },
     ]);
+  }
+
+  function addCandidate(c: AssistedCandidate) {
+    if (c.kind === "ref") {
+      setLines((prev) => {
+        if (prev.some((l) => l.reference === c.reference)) return prev;
+        return [
+          ...prev,
+          {
+            reference: c.reference,
+            barcode: barcodeFromRef(c.reference),
+            name: "",
+            quantity: 1,
+            packages: 0,
+          },
+        ];
+      });
+      return;
+    }
+    if (c.kind === "qty") {
+      setLines((prev) => {
+        if (!prev.length) return prev;
+        const last = prev[prev.length - 1];
+        const qty = Math.max(1, Number(c.reference) || 1);
+        return prev.map((l, i) => (i === prev.length - 1 ? { ...last, quantity: qty } : l));
+      });
+    }
+  }
+
+  function goTrain() {
+    if (lastFile) setPendingTrainFile(lastFile);
+    navigate("/entrenar");
   }
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
@@ -149,7 +197,7 @@ export function ClarivScanPage() {
             {busy ? status || "Leyendo…" : "Subir PDF"}
           </span>
           <span className="text-xs text-muted-foreground">
-            Texto nativo primero · OCR solo si hace falta
+            Cascada layout → OCR · nunca te deja tirado
           </span>
           <input
             type="file"
@@ -190,10 +238,45 @@ export function ClarivScanPage() {
           ¿Siempre el mismo albarán?{" "}
           <Link to="/entrenar" className="text-primary underline">
             Entrena el lector
-          </Link>{" "}
-          señalando SKU / nombre / cantidad.
+          </Link>
+          .
         </p>
       )}
+
+      {assisted ? (
+        <Card className="space-y-3 border-primary/40 bg-primary/5">
+          <p className="text-sm font-medium">No confío del todo — revisa candidatos</p>
+          <p className="text-xs text-muted-foreground">
+            Toca un código para añadirlo al pedido. Luego edita nombre/cantidad.
+          </p>
+          {candidates.filter((c) => c.kind === "ref").length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {candidates
+                .filter((c) => c.kind === "ref")
+                .map((c) => (
+                  <button
+                    key={`${c.kind}-${c.reference}`}
+                    type="button"
+                    onClick={() => addCandidate(c)}
+                    className="rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium transition active:scale-[0.97]"
+                  >
+                    {c.reference}
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Sin chips claros — añade a mano o entrena.</p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" className="w-full" onClick={goTrain} disabled={!lastFile}>
+              Entrenar con este doc
+            </Button>
+            <Button type="button" variant="ghost" className="w-full" onClick={addManual}>
+              Línea vacía
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="ghost" className="flex-1 gap-2" onClick={addManual}>

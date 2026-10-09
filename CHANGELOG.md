@@ -1,5 +1,14 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.2 — 2026-10-09
+
+### Lector PDF — contrato “nunca te dejo tirado”
+- **QualityGate**: rechaza éxitos con 1 línea basura; score unificado.
+- **Cascada**: pdf-layout → perfil entrenado en texto → OCR **todas las páginas** → modo asistido.
+- **pdf-layout**: tolerancia Y por altura de glyph, columnas por gaps X, detección de inicio de tabla.
+- **UI asistida**: chips de candidatos + “Entrenar con este doc” + línea vacía.
+- Stats locales en Ajustes (ok / asistidas / fallos).
+
 ## 0.3.1 — 2026-10-08
 
 ### Entrenar lector (por negocio)

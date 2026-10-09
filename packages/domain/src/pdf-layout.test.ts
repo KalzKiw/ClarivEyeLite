@@ -40,7 +40,60 @@ function pickingItems() {
       ],
     },
   ];
-  return rows.flatMap((r) => r.cells.map((c) => ({ str: c.str, x: c.x, y: r.y, width: c.str.length * 5 })));
+  return rows.flatMap((r) =>
+    r.cells.map((c) => ({
+      str: c.str,
+      x: c.x,
+      y: r.y,
+      width: c.str.length * 5,
+      height: 10,
+    })),
+  );
+}
+
+function tosmaItems() {
+  const header = [
+    { y: 800, cells: [{ x: 40, str: "ALBARÁN" }, { x: 200, str: "Tosma" }] },
+    { y: 780, cells: [{ x: 40, str: "Nº Albarán:" }, { x: 140, str: "A / 129" }] },
+  ];
+  const body = [
+    {
+      y: 700,
+      cells: [
+        { x: 20, str: "000113" },
+        { x: 90, str: "Válvula antirretorno" },
+        { x: 320, str: "20.00" },
+        { x: 400, str: "48,83" },
+      ],
+    },
+    {
+      y: 680,
+      cells: [
+        { x: 20, str: "77" },
+        { x: 90, str: "Membrana flujostato" },
+        { x: 320, str: "12.00" },
+        { x: 400, str: "25,00" },
+      ],
+    },
+    {
+      y: 660,
+      cells: [
+        { x: 20, str: "000107" },
+        { x: 90, str: "Aro cera" },
+        { x: 320, str: "21.00" },
+        { x: 400, str: "6,75" },
+      ],
+    },
+  ];
+  return [...header, ...body].flatMap((r) =>
+    r.cells.map((c) => ({
+      str: c.str,
+      x: c.x,
+      y: r.y,
+      width: c.str.length * 5,
+      height: 9,
+    })),
+  );
 }
 
 describe("pdf-layout", () => {
@@ -61,5 +114,15 @@ describe("pdf-layout", () => {
     const doc = parseColumnBundle(layout.columnBundle);
     expect(layout.columnBundle.fullText).toMatch(/Item12/);
     expect(doc.raw_text.length).toBeGreaterThan(20);
+  });
+
+  it("Tosma geométrico conserva códigos y parsea", () => {
+    const layout = layoutPdfItems(tosmaItems());
+    expect(layout.text).toMatch(/000113/);
+    expect(layout.text).toMatch(/Válvula|Valvula/i);
+    const doc = parseAnyDocument(layout.text);
+    expect(doc.lines.map((l) => l.reference)).toEqual(
+      expect.arrayContaining(["000113", "77", "000107"]),
+    );
   });
 });

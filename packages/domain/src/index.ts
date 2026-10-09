@@ -6,3 +6,4 @@ export * from "./document-profiles";
 export * from "./orders";
 export * from "./order-token";
 export * from "./pdf-layout";
+export * from "./quality-gate";

@@ -2,21 +2,36 @@ import {
   PROFILE_BANDS,
   businessProfileToBands,
   detectProfile,
+  extractAssistedCandidates,
   parseAnyDocument,
   parseColumnBundle,
+  passesQualityGate,
   scoreLayoutText,
+  scoreParseResult,
+  withCleanLines,
+  type AssistedCandidate,
   type DocumentParseResult,
   type DocumentProfile,
   type ProfileBand,
 } from "@clariveye-lite/domain";
 import { createWorker, PSM, type Worker } from "tesseract.js";
 import { getActiveDocProfile, recordProfileOutcome } from "@/lib/doc-profiles-store";
-import { extractPdfLayout, isPdfFile, renderPdfPageToCanvas } from "@/lib/pdf-text";
+import {
+  extractPdfLayout,
+  isPdfFile,
+  renderAllPdfPagesToCanvas,
+  renderPdfPageToCanvas,
+} from "@/lib/pdf-text";
+import { recordScanStat } from "@/lib/scan-stats";
 
-export type RecognizeSource = "pdf-text" | "pdf-layout" | "ocr" | "trained";
+export type RecognizeSource = "pdf-text" | "pdf-layout" | "ocr" | "trained" | "assisted";
 
 export type RecognizeResult = DocumentParseResult & {
   source: RecognizeSource;
+  /** Gate falló: UI debe mostrar candidatos / entrenar */
+  assisted?: boolean;
+  candidates?: AssistedCandidate[];
+  qualityScore?: number;
 };
 
 export type RecognizeOptions = {
@@ -130,18 +145,38 @@ async function ocrCanvas(
   return data.text || "";
 }
 
-function scoreDoc(doc: DocumentParseResult): number {
-  return doc.lines.reduce((s, l) => s + 1 + (l.name ? 1.5 : 0) + (l.quantity > 1 ? 0.5 : 0), 0);
-}
-
-function parseFromText(text: string): DocumentParseResult {
-  const profile = detectProfile(text);
+function parseFromText(text: string, profileOverride?: DocumentProfile): DocumentParseResult {
+  const profile = profileOverride || detectProfile(text);
   const doc = parseAnyDocument(text);
-  return { ...doc, profile: doc.profile || profile };
+  return withCleanLines({ ...doc, profile: profileOverride || doc.profile || profile });
 }
 
-function withSource(doc: DocumentParseResult, source: RecognizeSource): RecognizeResult {
-  return { ...doc, source };
+function withSource(
+  doc: DocumentParseResult,
+  source: RecognizeSource,
+  extra?: Partial<RecognizeResult>,
+): RecognizeResult {
+  const cleaned = withCleanLines(doc);
+  return {
+    ...cleaned,
+    source,
+    qualityScore: scoreParseResult(cleaned),
+    ...extra,
+  };
+}
+
+function assistedFrom(doc: DocumentParseResult, rawFallback: string): RecognizeResult {
+  const raw = doc.raw_text || rawFallback;
+  const candidates = extractAssistedCandidates(raw);
+  return withSource(doc, "assisted", {
+    assisted: true,
+    candidates,
+    raw_text: raw,
+  });
+}
+
+function pickBest(a: DocumentParseResult, b: DocumentParseResult): DocumentParseResult {
+  return scoreParseResult(a) >= scoreParseResult(b) ? a : b;
 }
 
 async function scanColumns(
@@ -189,16 +224,18 @@ async function scanColumns(
       });
 
       const joined = `${headerText}\n${skuText}\n${descText}\n${numsText}\n${fullText}`;
-      const fromColumns = parseColumnBundle({
-        headerText,
-        skuText,
-        descText,
-        numsText,
-        fullText: joined,
-      });
-      const fromProfile = parseFromText(joined);
-      const candidate = scoreDoc(fromProfile) >= scoreDoc(fromColumns) ? fromProfile : fromColumns;
-      const s = scoreDoc(candidate);
+      const fromColumns = withCleanLines(
+        parseColumnBundle({
+          headerText,
+          skuText,
+          descText,
+          numsText,
+          fullText: joined,
+        }),
+      );
+      const fromProfile = parseFromText(joined, profile);
+      const candidate = pickBest(fromProfile, fromColumns);
+      const s = scoreParseResult(candidate);
       if (s > bestScore) {
         bestScore = s;
         best = candidate;
@@ -206,8 +243,8 @@ async function scanColumns(
     }
   }
 
-  const fallback = parseFromText(`${headerText}\n${fullText}`);
-  const chosen = best && bestScore >= scoreDoc(fallback) ? best : fallback;
+  const fallback = parseFromText(`${headerText}\n${fullText}`, profile);
+  const chosen = best && bestScore >= scoreParseResult(fallback) ? best : fallback;
   return withSource(
     { ...chosen, profile: chosen.profile || profile },
     trainedBand ? "trained" : "ocr",
@@ -246,12 +283,11 @@ async function recognizeFromCanvas(
   const detected = detectProfile(`${headerText}\n${fullText}`);
   const profile: DocumentProfile = trained?.hints.baseProfile || detected;
 
-  // 1) Si hay perfil entrenado, probarlo primero
   let best: RecognizeResult | null = null;
   if (trainedBand) {
     onStatus?.(`Usando perfil: ${trained!.name}…`);
     best = await scanColumns(full, headerText, fullText, profile, "gray", onStatus, trainedBand);
-    if (scoreDoc(best) < 2) {
+    if (!passesQualityGate(best)) {
       const otsuTrained = await scanColumns(
         full,
         headerText,
@@ -261,20 +297,19 @@ async function recognizeFromCanvas(
         onStatus,
         trainedBand,
       );
-      if (scoreDoc(otsuTrained) > scoreDoc(best)) best = otsuTrained;
+      if (scoreParseResult(otsuTrained) > scoreParseResult(best)) best = otsuTrained;
     }
-    recordProfileOutcome(trained!.id, scoreDoc(best) >= 2);
+    recordProfileOutcome(trained!.id, passesQualityGate(best));
   }
 
-  // 2) Layout genérico si no hay entrenado o falló
-  if (!best || scoreDoc(best) < 2) {
+  if (!best || !passesQualityGate(best)) {
     let generic = await scanColumns(full, headerText, fullText, detected, "gray", onStatus);
-    if (scoreDoc(generic) < 2) {
+    if (!passesQualityGate(generic)) {
       onStatus?.("OCR reintento Otsu…");
       const otsuTry = await scanColumns(full, headerText, fullText, detected, "otsu", onStatus);
-      if (scoreDoc(otsuTry) > scoreDoc(generic)) generic = otsuTry;
+      if (scoreParseResult(otsuTry) > scoreParseResult(generic)) generic = otsuTry;
     }
-    if (!best || scoreDoc(generic) > scoreDoc(best)) best = generic;
+    if (!best || scoreParseResult(generic) > scoreParseResult(best)) best = generic;
   }
 
   return best;
@@ -284,8 +319,9 @@ async function ocrFromFile(file: File, onStatus?: (msg: string) => void): Promis
   let sourceCanvas: HTMLCanvasElement;
 
   if (isPdfFile(file)) {
-    onStatus?.("PDF raster…");
-    sourceCanvas = await renderPdfPageToCanvas(file, 3.2);
+    onStatus?.("PDF raster (todas las páginas)…");
+    const { canvas } = await renderAllPdfPagesToCanvas(file, 2.8, 6);
+    sourceCanvas = canvas;
   } else {
     onStatus?.("Preparando imagen…");
     const bitmap = await createImageBitmap(file);
@@ -300,13 +336,26 @@ async function ocrFromFile(file: File, onStatus?: (msg: string) => void): Promis
     bitmap.close();
   }
 
-  // Página completa en gris (sin binarizar a ciegas)
   const ctx = sourceCanvas.getContext("2d", { willReadFrequently: true })!;
   toGrayContrast(ctx, sourceCanvas.width, sourceCanvas.height, 1.25);
 
   return recognizeFromCanvas(sourceCanvas, onStatus);
 }
 
+function finish(result: RecognizeResult): RecognizeResult {
+  const ok = passesQualityGate(result) && !result.assisted;
+  recordScanStat({
+    source: result.source,
+    score: result.qualityScore ?? scoreParseResult(result),
+    ok,
+    assisted: !!result.assisted,
+  });
+  return result;
+}
+
+/**
+ * Cascada: layout → trained text → OCR multipágina → asistido.
+ */
 export async function recognizeDocumentStructured(
   file: File,
   onStatusOrOpts?: ((msg: string) => void) | RecognizeOptions,
@@ -316,7 +365,9 @@ export async function recognizeDocumentStructured(
   const onStatus = opts.onStatus;
 
   if (opts.forceOcr) {
-    return ocrFromFile(file, onStatus);
+    const ocr = await ocrFromFile(file, onStatus);
+    if (passesQualityGate(ocr)) return finish(ocr);
+    return finish(assistedFrom(ocr, ocr.raw_text));
   }
 
   if (isPdfFile(file)) {
@@ -324,41 +375,62 @@ export async function recognizeDocumentStructured(
     try {
       const layout = await extractPdfLayout(file);
       const layoutScore = scoreLayoutText(layout.text);
+      const trained = getActiveDocProfile();
 
-      if (layout.text.length >= 40 && layoutScore >= 6) {
-        const fromText = parseFromText(layout.text);
-        const fromCols = parseColumnBundle(layout.columnBundle);
-        const best =
-          scoreDoc(fromText) >= scoreDoc(fromCols)
-            ? fromText
-            : { ...fromCols, profile: fromCols.profile || fromText.profile };
+      let bestDoc: DocumentParseResult | null = null;
+      let source: RecognizeSource = "pdf-layout";
 
-        if (scoreDoc(best) >= 2 || (scoreDoc(best) >= 1 && layoutScore >= 12)) {
-          onStatus?.(`PDF layout · ${best.lines.length} producto(s)`);
-          return withSource(best, "pdf-layout");
+      if (layout.text.length >= 40 && layoutScore >= 4) {
+        const fromText = parseFromText(layout.text, trained?.hints.baseProfile);
+        const fromCols = withCleanLines(parseColumnBundle(layout.columnBundle));
+        bestDoc = pickBest(fromText, fromCols);
+        source = "pdf-layout";
+
+        // Perfil entrenado: re-parse con baseProfile sobre texto nativo
+        if (trained?.hints.baseProfile) {
+          const forced = parseFromText(layout.text, trained.hints.baseProfile);
+          if (scoreParseResult(forced) > scoreParseResult(bestDoc)) {
+            bestDoc = forced;
+            source = "trained";
+          }
+        }
+
+        if (bestDoc && passesQualityGate(bestDoc)) {
+          onStatus?.(`PDF layout · ${bestDoc.lines.length} producto(s)`);
+          return finish(withSource(bestDoc, source));
         }
       }
 
-      if (layout.text.length >= 40) {
-        const flat = parseFromText(layout.text);
-        if (scoreDoc(flat) >= 3) {
-          onStatus?.(`PDF texto · ${flat.lines.length} producto(s)`);
-          return withSource(flat, "pdf-text");
+      // Poco texto nativo o gate falló → OCR multipágina
+      const weakNative = layout.itemCount < 15 || layout.text.length < 40 || layoutScore < 6;
+      if (weakNative || !bestDoc || !passesQualityGate(bestDoc)) {
+        onStatus?.("PDF · OCR cascada…");
+        const ocr = await ocrFromFile(file, onStatus);
+        if (passesQualityGate(ocr)) return finish(ocr);
+        if (bestDoc && scoreParseResult(bestDoc) > scoreParseResult(ocr)) {
+          return finish(assistedFrom(bestDoc, layout.text || ocr.raw_text));
         }
+        return finish(assistedFrom(ocr, ocr.raw_text || layout.text));
       }
 
-      onStatus?.("PDF sin texto útil · OCR…");
-      return ocrFromFile(file, onStatus);
+      return finish(assistedFrom(bestDoc, layout.text));
     } catch (err) {
       console.warn("PDF path failed, OCR fallback", err);
-      return ocrFromFile(file, onStatus);
+      const ocr = await ocrFromFile(file, onStatus);
+      if (passesQualityGate(ocr)) return finish(ocr);
+      return finish(assistedFrom(ocr, ocr.raw_text));
     }
   }
 
-  return ocrFromFile(file, onStatus);
+  const ocr = await ocrFromFile(file, onStatus);
+  if (passesQualityGate(ocr)) return finish(ocr);
+  return finish(assistedFrom(ocr, ocr.raw_text));
 }
 
 export async function recognizeDocument(file: File): Promise<string> {
   const doc = await recognizeDocumentStructured(file);
   return doc.raw_text;
 }
+
+/** @deprecated use renderAllPdfPagesToCanvas — kept for TrainParserPage single preview */
+export { renderPdfPageToCanvas };

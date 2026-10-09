@@ -26,6 +26,11 @@ Todo lo demás (cuenta, equipo, plan) debe estar en **Ajustes** o flujos cortos 
 - PDF escaneado / foto → Tesseract (gris → Otsu si falla).
 - UI muestra fuente: `PDF layout` | `PDF texto` | `OCR` + **Forzar OCR**.
 
+## Contrato lectura PDF (0.3.2)
+
+Nunca pantalla muerta: QualityGate → cascada layout/OCR multipágina → asistido (chips + entrenar).
+OCR cloud = Pro futuro; esta versión es 100% cliente.
+
 ## Entrenar lector (por negocio)
 
 Flujo `/entrenar` (también desde Ajustes / ClarivScan):
