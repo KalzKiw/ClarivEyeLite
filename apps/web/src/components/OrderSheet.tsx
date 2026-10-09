@@ -4,6 +4,7 @@ import { FileDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { Button, Field, StatusPill, TextInput } from "@/components/ui";
+import { useAuth } from "@/lib/auth-context";
 import { downloadOrderPdf } from "@/lib/order-pdf";
 import { patchOrderLines, patchOrderNotes, patchOrderStatus } from "@/lib/store";
 
@@ -18,6 +19,7 @@ export function OrderSheet({
   onClose: () => void;
   onChange: (orders: Order[]) => void;
 }) {
+  const { business } = useAuth();
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [pdfBusy, setPdfBusy] = useState(false);
@@ -48,7 +50,7 @@ export function OrderSheet({
     setPdfBusy(true);
     try {
       const fresh = { ...order!, notes: notes.trim() || null, lines };
-      await downloadOrderPdf(fresh);
+      await downloadOrderPdf(fresh, { businessName: business?.name });
     } finally {
       setPdfBusy(false);
     }

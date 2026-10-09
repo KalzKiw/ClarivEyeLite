@@ -1,86 +1,374 @@
-import type { Order } from "@clariveye-lite/domain";
+import type { Order, OrderLine } from "@clariveye-lite/domain";
 import { ORDER_STATUS_LABEL, encodeOrderToken } from "@clariveye-lite/domain";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { code128DataUrl, qrDataUrl } from "@/lib/order-barcode";
 
-export async function downloadOrderPdf(order: Order) {
+const MARGIN = 14;
+const PAGE_W = 210;
+const PAGE_H = 297;
+const CONTENT_RIGHT = PAGE_W - MARGIN;
+const FOOTER_Y = 287;
+const PRIMARY: [number, number, number] = [37, 99, 235];
+const INK: [number, number, number] = [24, 24, 27];
+const MUTED: [number, number, number] = [113, 113, 122];
+
+export type OrderPdfOptions = {
+  businessName?: string;
+};
+
+function parseUnitPrice(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[^\d,.-]/g, "").replace(",", ".");
+  const n = Number.parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtMoney(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
+function fmtDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function lineAmount(line: OrderLine): number | null {
+  const unit = parseUnitPrice(line.unitPrice);
+  if (unit === null) return null;
+  return unit * line.quantity;
+}
+
+function checkbox(picked: boolean): string {
+  // ASCII: Helvetica de jsPDF no dibuja bien ☐/☑
+  return picked ? "[x]" : "[ ]";
+}
+
+function lastTableY(doc: jsPDF): number {
+  return (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 120;
+}
+
+function drawPageFooters(doc: jsPDF) {
+  const total = doc.getNumberOfPages();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(220, 220, 225);
+    doc.setLineWidth(0.2);
+    doc.line(MARGIN, FOOTER_Y - 4, CONTENT_RIGHT, FOOTER_Y - 4);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text(
+      "ClarivEye Lite · Documento operativo · No sustituye factura fiscal",
+      MARGIN,
+      FOOTER_Y,
+    );
+    doc.text(`Pág. ${i}/${total}`, CONTENT_RIGHT, FOOTER_Y, { align: "right" });
+  }
+  doc.setTextColor(...INK);
+}
+
+function drawSignatures(doc: jsPDF, y: number): number {
+  const need = 42;
+  if (y + need > FOOTER_Y - 8) {
+    doc.addPage();
+    y = MARGIN + 6;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(...INK);
+  doc.text("Conformidad", MARGIN, y);
+  y += 6;
+
+  const colW = (CONTENT_RIGHT - MARGIN - 8) / 2;
+  const leftX = MARGIN;
+  const rightX = MARGIN + colW + 8;
+
+  for (const [x, label] of [
+    [leftX, "Preparador"] as const,
+    [rightX, "Receptor"] as const,
+  ]) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text(label, x, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text("Nombre / firma", x, y + 5);
+    doc.setDrawColor(160, 160, 170);
+    doc.setLineWidth(0.3);
+    doc.line(x, y + 22, x + colW, y + 22);
+    doc.setTextColor(...MUTED);
+    doc.text("Fecha _______________", x, y + 28);
+    doc.setTextColor(...INK);
+  }
+
+  return y + 34;
+}
+
+function ensureY(doc: jsPDF, y: number, need: number): number {
+  if (y + need <= FOOTER_Y - 10) return y;
+  doc.addPage();
+  return MARGIN + 6;
+}
+
+/** PDF A4: orden de picking + comprobante del pedido. */
+export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   const token = encodeOrderToken(order.id);
   const barcodeImg = code128DataUrl(token, 48);
   const qrImg = await qrDataUrl(token, 110);
+  const businessName = opts?.businessName?.trim() || "Negocio";
+  const printedAt = fmtDate(new Date().toISOString());
+
+  const totalQty = order.lines.reduce((s, l) => s + l.quantity, 0);
+  const totalPkg = order.lines.reduce((s, l) => s + l.packages, 0);
+  const pickedCount = order.lines.filter((l) => l.picked).length;
+  const amounts = order.lines.map(lineAmount);
+  const hasPrices = amounts.some((a) => a !== null);
+  const totalAmount = hasPrices
+    ? amounts.reduce<number>((s, a) => s + (a ?? 0), 0)
+    : null;
 
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const margin = 14;
+  let y = MARGIN;
 
-  doc.setFontSize(16);
+  // —— Cabecera ——
+  doc.setFillColor(...PRIMARY);
+  doc.rect(0, 0, PAGE_W, 28, "F");
+  doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
-  doc.text("ClarivEye Lite", margin, 18);
-  doc.setFontSize(11);
+  doc.setFontSize(14);
+  doc.text("ClarivEye Lite", MARGIN, 12);
+  doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text("Albarán / Hoja de picking", margin, 25);
-
+  doc.text("Orden de picking / Comprobante", MARGIN, 19);
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(`Documento: ${order.docNumber}`, margin, 36);
-  doc.text(`Estado: ${ORDER_STATUS_LABEL[order.status]}`, margin, 42);
-  doc.text(`Alta: ${new Date(order.createdAt).toLocaleString()}`, margin, 48);
-  doc.text(`Líneas: ${order.lines.length}`, margin, 54);
-
-  // Code128
-  doc.addImage(barcodeImg, "PNG", margin, 60, 110, 18);
+  doc.text(businessName, CONTENT_RIGHT, 12, { align: "right" });
+  doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text(token, margin, 82);
-  doc.text(order.docNumber, margin, 86);
+  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, 19, { align: "right" });
 
-  // QR
-  doc.addImage(qrImg, "PNG", 150, 58, 42, 42);
+  y = 36;
+  doc.setTextColor(...INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text(order.docNumber, MARGIN, y);
+  y += 6;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...MUTED);
+  const metaBits = [
+    `Estado: ${ORDER_STATUS_LABEL[order.status]}`,
+    `Alta: ${fmtDate(order.createdAt)}`,
+  ];
+  if (order.docDate) metaBits.push(`Doc.: ${order.docDate}`);
+  if (order.deliveredAt) metaBits.push(`Entrega: ${fmtDate(order.deliveredAt)}`);
+  doc.text(metaBits.join("  ·  "), MARGIN, y);
+  y += 5;
+  if (order.notes?.trim()) {
+    doc.setTextColor(...INK);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(8);
+    const noteLines = doc.splitTextToSize(`Notas: ${order.notes.trim()}`, CONTENT_RIGHT - MARGIN);
+    doc.text(noteLines, MARGIN, y);
+    y += noteLines.length * 3.5 + 2;
+    doc.setFont("helvetica", "normal");
+  }
+
+  // —— Códigos escaneables ——
+  y = Math.max(y + 2, 52);
+  doc.setDrawColor(230, 230, 235);
+  doc.setFillColor(250, 250, 252);
+  doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, 48, 2, 2, "FD");
+
+  doc.addImage(barcodeImg, "PNG", MARGIN + 4, y + 6, 100, 16);
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text(token, MARGIN + 4, y + 28);
+  doc.setTextColor(...INK);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text(order.docNumber, MARGIN + 4, y + 34);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...MUTED);
+  doc.text("Escanea CEL1 o el QR para abrir en Picking", MARGIN + 4, y + 40);
+
+  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 44, y + 4, 40, 40);
+
+  y += 54;
+
+  // —— Resumen ——
+  const boxW = (CONTENT_RIGHT - MARGIN - 9) / 4;
+  const summary = [
+    { label: "Líneas", value: String(order.lines.length) },
+    { label: "Unidades", value: String(totalQty) },
+    { label: "Bultos", value: String(totalPkg) },
+    { label: "Preparadas", value: `${pickedCount}/${order.lines.length}` },
+  ];
+  summary.forEach((item, i) => {
+    const x = MARGIN + i * (boxW + 3);
+    doc.setFillColor(245, 247, 255);
+    doc.setDrawColor(...PRIMARY);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, boxW, 14, 1.5, 1.5, "FD");
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.text(item.label, x + boxW / 2, y + 5, { align: "center" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...INK);
+    doc.text(item.value, x + boxW / 2, y + 11, { align: "center" });
+  });
+  y += 20;
+
+  // —— Tabla ——
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text("Líneas del pedido", MARGIN, y);
+  y += 3;
 
   autoTable(doc, {
-    startY: 94,
-    head: [["Ref", "Nombre", "Cant.", "Bultos", "Barcode"]],
-    body: order.lines.map((line) => [
-      line.reference,
-      line.name || "—",
-      String(line.quantity),
-      String(line.packages),
-      line.barcode || line.reference,
-    ]),
-    styles: { fontSize: 9, cellPadding: 2 },
-    headStyles: { fillColor: [37, 99, 235] },
-    margin: { left: margin, right: margin },
+    startY: y,
+    head: [["", "#", "Ref", "Descripción", "Ud", "Bultos", "P.unit", "Importe", "Código"]],
+    body: order.lines.map((line, idx) => {
+      const unit = parseUnitPrice(line.unitPrice);
+      const amount = lineAmount(line);
+      return [
+        checkbox(line.picked),
+        String(idx + 1),
+        line.reference,
+        line.name || "—",
+        String(line.quantity),
+        String(line.packages),
+        unit !== null ? fmtMoney(unit) : line.unitPrice?.trim() || "—",
+        amount !== null ? fmtMoney(amount) : "—",
+        line.barcode || line.reference,
+      ];
+    }),
+    styles: { fontSize: 7.5, cellPadding: 1.6, textColor: INK, overflow: "linebreak" },
+    headStyles: {
+      fillColor: PRIMARY,
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: 7.5,
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 7, halign: "center" },
+      1: { cellWidth: 7, halign: "center" },
+      2: { cellWidth: 24 },
+      3: { cellWidth: 42 },
+      4: { cellWidth: 10, halign: "right" },
+      5: { cellWidth: 12, halign: "right" },
+      6: { cellWidth: 18, halign: "right" },
+      7: { cellWidth: 20, halign: "right" },
+      8: { cellWidth: 22 },
+    },
+    didParseCell(data) {
+      if (data.section !== "body") return;
+      const line = order.lines[data.row.index];
+      if (line?.picked) {
+        data.cell.styles.textColor = [140, 140, 148];
+      }
+    },
+    margin: { left: MARGIN, right: MARGIN },
   });
 
-  const finalY = (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 120;
-  let y = finalY + 10;
+  y = lastTableY(doc) + 8;
 
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.text("Barcodes de línea (picking rápido)", margin, y);
-  y += 4;
+  // —— Totales ——
+  y = ensureY(doc, y, 28);
+  const totalsX = CONTENT_RIGHT - 70;
+  doc.setFillColor(250, 250, 252);
+  doc.setDrawColor(220, 220, 225);
+  doc.roundedRect(totalsX - 4, y - 4, 74, hasPrices ? 28 : 20, 2, 2, "FD");
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...MUTED);
+  doc.text("Total unidades", totalsX, y + 2);
+  doc.text("Total bultos", totalsX, y + 8);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...INK);
+  doc.text(String(totalQty), CONTENT_RIGHT, y + 2, { align: "right" });
+  doc.text(String(totalPkg), CONTENT_RIGHT, y + 8, { align: "right" });
+  if (hasPrices && totalAmount !== null) {
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...MUTED);
+    doc.text("Importe", totalsX, y + 16);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...PRIMARY);
+    doc.text(fmtMoney(totalAmount), CONTENT_RIGHT, y + 16, { align: "right" });
+    y += 30;
+  } else {
+    y += 22;
+  }
 
-  for (const line of order.lines) {
-    const value = (line.barcode || line.reference).trim();
-    if (!value || y > 270) {
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
+  // —— Anexo barcodes compacto ——
+  if (order.lines.length > 0) {
+    y = ensureY(doc, y, 20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(...INK);
+    doc.text("Picking rápido — barcodes de línea", MARGIN, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+
+    for (const line of order.lines) {
+      const value = (line.barcode || line.reference).trim();
+      y = ensureY(doc, y, 16);
+      // Fila: checkbox + ref/qty + barcode
+      doc.setFontSize(9);
+      doc.setTextColor(...INK);
+      doc.text(`${checkbox(line.picked)}  ${line.reference}  ·  x${line.quantity}`, MARGIN, y + 3);
+      doc.setFontSize(7);
+      doc.setTextColor(...MUTED);
+      const desc = (line.name || "").slice(0, 40);
+      if (desc) doc.text(desc, MARGIN + 2, y + 7);
+
+      if (value) {
+        try {
+          const img = code128DataUrl(value, 22);
+          doc.addImage(img, "PNG", 110, y - 1, 72, 9);
+          doc.setFontSize(6);
+          doc.text(value, 110, y + 11);
+        } catch {
+          doc.setFontSize(7);
+          doc.setTextColor(...MUTED);
+          doc.text(value, 110, y + 4);
+        }
       }
-      if (!value) continue;
-    }
-    try {
-      const img = code128DataUrl(value, 28);
-      doc.setFontSize(8);
-      doc.text(`${line.reference} · x${line.quantity}`, margin, y);
-      y += 2;
-      doc.addImage(img, "PNG", margin, y, 70, 10);
-      y += 14;
-    } catch {
-      /* valor no válido para Code128 */
+      y += 15;
     }
   }
 
-  doc.setFontSize(7);
-  doc.setTextColor(120);
-  doc.text("ClarivEye Lite · Escanea CEL1 o el QR para abrir el pedido en Picking", margin, 285);
+  // —— Firmas ——
+  y = drawSignatures(doc, y + 4);
+
+  if (order.deliveryNotes?.trim()) {
+    y = ensureY(doc, y, 12);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    const dn = doc.splitTextToSize(`Notas de entrega: ${order.deliveryNotes.trim()}`, CONTENT_RIGHT - MARGIN);
+    doc.text(dn, MARGIN, y);
+  }
+
+  drawPageFooters(doc);
   doc.save(`pedido-${order.docNumber.replace(/[^\w\-]+/g, "_")}.pdf`);
 }

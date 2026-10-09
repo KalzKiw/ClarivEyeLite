@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { Button, Card, StatusPill } from "@/components/ui";
+import { useAuth } from "@/lib/auth-context";
 import { downloadOrderPdf } from "@/lib/order-pdf";
 import { loadOrders, patchOrderLines, patchOrderStatus } from "@/lib/store";
 
@@ -24,6 +25,7 @@ function loadPickingOrder(id: string): Order | null {
 export function PickingOrderPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const { business } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState("");
@@ -118,7 +120,7 @@ export function PickingOrderPage() {
     if (!order) return;
     setPdfBusy(true);
     try {
-      await downloadOrderPdf(order);
+      await downloadOrderPdf(order, { businessName: business?.name });
     } finally {
       setPdfBusy(false);
     }
