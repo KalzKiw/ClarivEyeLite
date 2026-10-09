@@ -1,32 +1,34 @@
 /**
  * Mascota Clariv — caja isométrica tipo 📦.
- * Cinta: tapa + cara izq. Ojos tipo Clippy: esferas 3D que salen del plano.
+ * Cinta: tapa + cara izq. Ojos ovalados 3D que salen hacia arriba (Clippy).
  */
 
 function ClippyEye({
   cx,
   cy,
-  r = 16,
-  pupilDx = 2.5,
-  pupilDy = 2,
+  rx = 11,
+  ry = 18,
+  pupilDx = 1.5,
+  pupilDy = 3,
   closed,
 }: {
   cx: number;
   cy: number;
-  r?: number;
+  rx?: number;
+  ry?: number;
   pupilDx?: number;
   pupilDy?: number;
   closed?: boolean;
 }) {
-  const id = `eye-${cx}-${cy}`;
+  const id = `eye-${Math.round(cx)}-${Math.round(cy)}`;
   if (closed) {
     return (
       <g>
-        <ellipse cx={cx} cy={cy + 2} rx={r * 0.85} ry={r * 0.28} fill="#3b2314" fillOpacity="0.18" />
+        <ellipse cx={cx + 1} cy={cy + ry * 0.35} rx={rx * 0.9} ry={ry * 0.2} fill="#3b2314" fillOpacity="0.2" />
         <path
-          d={`M${cx - r * 0.75} ${cy} Q${cx} ${cy - r * 0.35} ${cx + r * 0.75} ${cy}`}
+          d={`M${cx - rx * 0.85} ${cy} Q${cx} ${cy - ry * 0.25} ${cx + rx * 0.85} ${cy}`}
           stroke="#2a1810"
-          strokeWidth="3.2"
+          strokeWidth="3"
           fill="none"
           strokeLinecap="round"
         />
@@ -34,51 +36,56 @@ function ClippyEye({
     );
   }
 
+  const pupilR = Math.min(rx, ry) * 0.42;
+
   return (
     <g>
       <defs>
-        <radialGradient id={`${id}-ball`} cx="38%" cy="32%" r="70%">
+        <radialGradient id={`${id}-ball`} cx="36%" cy="28%" r="72%">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="55%" stopColor="#f4f0ea" />
-          <stop offset="100%" stopColor="#d4cfc6" />
+          <stop offset="50%" stopColor="#f6f2ec" />
+          <stop offset="100%" stopColor="#cfc8be" />
         </radialGradient>
-        <radialGradient id={`${id}-shade`} cx="70%" cy="78%" r="65%">
-          <stop offset="40%" stopColor="#000" stopOpacity="0" />
-          <stop offset="100%" stopColor="#3b2314" stopOpacity="0.22" />
+        <radialGradient id={`${id}-shade`} cx="68%" cy="82%" r="60%">
+          <stop offset="35%" stopColor="#000" stopOpacity="0" />
+          <stop offset="100%" stopColor="#3b2314" stopOpacity="0.25" />
         </radialGradient>
       </defs>
-      {/* Sombra en la cara → el ojo “sale” del plano */}
+      {/* Sombra en la caja (el óvalo “apoya” y sale hacia arriba) */}
       <ellipse
-        cx={cx + 2}
-        cy={cy + r * 0.55}
-        rx={r * 0.95}
-        ry={r * 0.38}
+        cx={cx + 1.5}
+        cy={cy + ry * 0.72}
+        rx={rx * 1.05}
+        ry={ry * 0.28}
         fill="#3b2314"
-        fillOpacity="0.28"
+        fillOpacity="0.3"
       />
-      <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-ball)`} />
-      <circle cx={cx} cy={cy} r={r} fill={`url(#${id}-shade)`} />
+      {/* Globo ovalado vertical */}
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${id}-ball)`} />
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${id}-shade)`} />
+      {/* Brillos */}
       <ellipse
-        cx={cx - r * 0.32}
-        cy={cy - r * 0.38}
-        rx={r * 0.28}
-        ry={r * 0.22}
+        cx={cx - rx * 0.28}
+        cy={cy - ry * 0.42}
+        rx={rx * 0.32}
+        ry={ry * 0.22}
         fill="#fff"
         fillOpacity="0.95"
       />
       <ellipse
-        cx={cx - r * 0.12}
-        cy={cy - r * 0.18}
-        rx={r * 0.1}
-        ry={r * 0.08}
+        cx={cx - rx * 0.08}
+        cy={cy - ry * 0.18}
+        rx={rx * 0.12}
+        ry={ry * 0.08}
         fill="#fff"
-        fillOpacity="0.7"
+        fillOpacity="0.65"
       />
-      <circle cx={cx + pupilDx} cy={cy + pupilDy} r={r * 0.32} fill="#1a120c" />
+      {/* Pupila */}
+      <circle cx={cx + pupilDx} cy={cy + pupilDy} r={pupilR} fill="#1a120c" />
       <circle
-        cx={cx + pupilDx + r * 0.1}
-        cy={cy + pupilDy - r * 0.12}
-        r={r * 0.09}
+        cx={cx + pupilDx + pupilR * 0.35}
+        cy={cy + pupilDy - pupilR * 0.35}
+        r={pupilR * 0.28}
         fill="#fff"
         fillOpacity="0.55"
       />
@@ -106,8 +113,11 @@ export function BoxMascot({
       />
     );
 
-  const browY = mood === "wow" ? 52 : 56;
-  const browArch = mood === "wow" ? -6 : -3;
+  /* Óvalos anclados bajos en la cara y creciendo hacia arriba (salen del plano) */
+  const eyeY = mood === "wow" ? 58 : 62;
+  const eyeRy = mood === "wow" ? 22 : 19;
+  const eyeRx = mood === "wow" ? 12.5 : 11;
+  const browY = eyeY - eyeRy - 6;
 
   return (
     <svg
@@ -142,29 +152,24 @@ export function BoxMascot({
         <path d="M23.5 2.5 L25.5 4.5" stroke="#5c5044" strokeWidth="1.1" strokeLinecap="round" />
       </g>
 
-      {/* Cejas estilo Clippy (flotando encima) */}
+      {/* Cejas encima de los óvalos */}
       {mood !== "wink" && (
-        <g stroke="#1a120c" strokeWidth="3.2" fill="none" strokeLinecap="round">
-          <path d={`M74 ${browY + 4} Q84 ${browY + browArch} 94 ${browY + 2}`} />
-          <path d={`M98 ${browY + 2} Q108 ${browY + browArch} 118 ${browY + 4}`} />
+        <g stroke="#1a120c" strokeWidth="3" fill="none" strokeLinecap="round">
+          <path d={`M74 ${browY + 5} Q84 ${browY - 2} 92 ${browY + 3}`} />
+          <path d={`M100 ${browY + 3} Q108 ${browY - 2} 118 ${browY + 5}`} />
         </g>
       )}
 
-      {/* Ojos 3D Clippy — sobresalen del panel derecho */}
+      {/* Ojos ovalados — salen hacia arriba del panel derecho */}
       {mood === "wink" ? (
         <>
-          <ClippyEye cx={84} cy={78} r={15} closed />
-          <ClippyEye cx={108} cy={76} r={16.5} pupilDx={3} pupilDy={1.5} />
-        </>
-      ) : mood === "wow" ? (
-        <>
-          <ClippyEye cx={84} cy={76} r={17.5} pupilDx={0} pupilDy={1} />
-          <ClippyEye cx={108} cy={74} r={17.5} pupilDx={0} pupilDy={1} />
+          <ClippyEye cx={84} cy={eyeY} rx={eyeRx} ry={eyeRy} closed />
+          <ClippyEye cx={108} cy={eyeY - 2} rx={eyeRx + 0.5} ry={eyeRy + 1} pupilDx={2} pupilDy={4} />
         </>
       ) : (
         <>
-          <ClippyEye cx={84} cy={78} r={16} pupilDx={2.5} pupilDy={2} />
-          <ClippyEye cx={108} cy={76} r={16.5} pupilDx={3} pupilDy={1.5} />
+          <ClippyEye cx={84} cy={eyeY} rx={eyeRx} ry={eyeRy} pupilDx={1.5} pupilDy={mood === "wow" ? 1 : 3} />
+          <ClippyEye cx={108} cy={eyeY - 2} rx={eyeRx + 0.5} ry={eyeRy + 1} pupilDx={2} pupilDy={mood === "wow" ? 1 : 2.5} />
         </>
       )}
 
