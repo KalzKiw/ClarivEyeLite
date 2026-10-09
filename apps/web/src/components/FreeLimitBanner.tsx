@@ -1,7 +1,7 @@
 import { FREE_OPEN_LIMIT } from "@clariveye-lite/domain";
 import { Sparkles } from "lucide-react";
 
-/** Banner compacto que invita a Pro cuando el cupo free está lleno. */
+/** Mini-banner al estilo del popup (morado + CTA coral). */
 export function FreeLimitBanner({
   openCount,
   onOpenUpgrade,
@@ -9,33 +9,28 @@ export function FreeLimitBanner({
   openCount: number;
   onOpenUpgrade: () => void;
 }) {
-  const fill = Math.min(100, (openCount / FREE_OPEN_LIMIT) * 100);
-
   return (
-    <div className="overflow-hidden rounded-2xl border border-violet-200 bg-white shadow-sm shadow-violet-900/5">
-      <div
-        className="h-1 w-full bg-zinc-100"
-        aria-hidden
-      >
-        <div
-          className="h-full bg-gradient-to-r from-fuchsia-400 via-violet-500 to-violet-700 transition-all"
-          style={{ width: `${fill}%` }}
-        />
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+    <div
+      className="relative overflow-hidden rounded-2xl shadow-md shadow-violet-900/20"
+      style={{ background: "linear-gradient(105deg, #5b21b6 0%, #7c3aed 55%, #86198f 100%)" }}
+    >
+      <div className="pointer-events-none absolute -left-6 -top-8 size-28 rounded-full bg-[#4c1d95]/70" aria-hidden />
+      <div className="pointer-events-none absolute -bottom-10 right-10 size-32 rounded-full bg-[#4c1d95]/45" aria-hidden />
+
+      <div className="relative flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
         <div className="min-w-0">
-          <p className="text-sm font-bold text-zinc-900">Cupo Free agotado</p>
-          <p className="text-xs font-medium text-zinc-600">
-            {openCount}/{FREE_OPEN_LIMIT} pedidos abiertos · ClarivScan en pausa
+          <p className="text-[11px] font-semibold text-white/85">¡Espera! Cupo Free lleno</p>
+          <p className="text-sm font-bold leading-snug text-white">
+            {openCount}/{FREE_OPEN_LIMIT} abiertos · pasa a Pro en 1 clic
           </p>
         </div>
         <button
           type="button"
           onClick={onOpenUpgrade}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-violet-700 px-3.5 py-2.5 text-xs font-bold text-white shadow-sm shadow-violet-800/20 transition active:scale-[0.97] hover:bg-violet-800"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#e11d48] px-4 py-2.5 text-xs font-extrabold uppercase tracking-wide text-white shadow-sm transition active:scale-[0.97] hover:bg-[#be123c]"
         >
           <Sparkles size={14} />
-          Ver planes Pro
+          Ver Pro
         </button>
       </div>
     </div>
