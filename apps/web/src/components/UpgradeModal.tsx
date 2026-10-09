@@ -32,12 +32,28 @@ const PRICE = {
   annual: { amount: 19, period: "mes", note: "Ahorras 120 €/año", billed: "228 € facturados al año" },
 };
 
-function FeatureRow({ ok, label, onDark }: { ok: boolean; label: string; onDark?: boolean }) {
+function FeatureRow({
+  ok,
+  label,
+  onDark,
+  compact,
+}: {
+  ok: boolean;
+  label: string;
+  onDark?: boolean;
+  compact?: boolean;
+}) {
   return (
-    <li className="flex items-start gap-2.5 text-[13px] leading-snug">
+    <li
+      className={cn(
+        "flex items-start leading-snug",
+        compact ? "gap-1.5 text-[11px] sm:gap-2.5 sm:text-[13px]" : "gap-2.5 text-[13px]",
+      )}
+    >
       <span
         className={cn(
-          "mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full",
+          "mt-0.5 flex shrink-0 items-center justify-center rounded-full",
+          compact ? "size-4 sm:size-[18px]" : "size-[18px]",
           ok
             ? onDark
               ? "bg-white/20 text-white"
@@ -47,10 +63,15 @@ function FeatureRow({ ok, label, onDark }: { ok: boolean; label: string; onDark?
               : "bg-zinc-100 text-zinc-400",
         )}
       >
-        {ok ? <Check size={11} strokeWidth={3} /> : <Minus size={11} strokeWidth={2.5} />}
+        {ok ? (
+          <Check size={compact ? 9 : 11} strokeWidth={3} />
+        ) : (
+          <Minus size={compact ? 9 : 11} strokeWidth={2.5} />
+        )}
       </span>
       <span
         className={cn(
+          "min-w-0 break-words",
           ok ? "font-medium" : "line-through decoration-1",
           onDark ? (ok ? "text-white" : "text-white/40") : ok ? "text-zinc-800" : "text-zinc-400",
         )}
@@ -218,67 +239,77 @@ export function UpgradeModal({
               <p className="text-[11px] font-medium text-zinc-500">{price.billed}</p>
             </div>
 
-            {/* Móvil: columna (Pro primero). Desktop: 2 columnas lado a lado */}
-            <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4">
-              {/* Pro primero en móvil */}
+            {/* Siempre lado a lado: Free | Pro */}
+            <div className="grid grid-cols-2 items-stretch gap-2.5 sm:gap-4">
+              <div className="flex min-w-0 flex-col rounded-xl border border-zinc-200 bg-white p-3 shadow-sm sm:rounded-2xl sm:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-500 sm:text-[11px]">
+                  Free
+                </p>
+                <p className="mt-1.5 text-2xl font-semibold tracking-tight text-zinc-900 sm:mt-2 sm:text-4xl">
+                  0 €
+                  <span className="text-xs font-semibold text-zinc-500 sm:text-base"> /siempre</span>
+                </p>
+                <p className="mt-1 text-[11px] font-medium leading-snug text-zinc-600 sm:text-sm">
+                  Ideal para probar
+                </p>
+                <ul className="mt-3 flex-1 space-y-2 sm:mt-4 sm:space-y-2.5">
+                  {FREE_FEATURES.map((f) => (
+                    <FeatureRow key={f.label} ok={f.ok} label={f.label} compact />
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mt-4 w-full rounded-lg border-2 border-zinc-200 bg-zinc-50 py-2.5 text-xs font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white sm:mt-5 sm:rounded-xl sm:py-3 sm:text-sm"
+                >
+                  Seguir Free
+                </button>
+              </div>
+
               <div
-                className="relative order-1 flex flex-col rounded-2xl border-2 border-violet-600 p-4 sm:order-2 sm:p-5"
+                className="relative flex min-w-0 flex-col rounded-xl border-2 border-violet-600 p-3 sm:rounded-2xl sm:p-5"
                 style={{
                   background: "linear-gradient(165deg, #5b21b6 0%, #6d28d9 55%, #86198f 100%)",
                 }}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">Pro</p>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-800">
-                    <Sparkles size={11} />
-                    Recomendado
+                <div className="flex flex-wrap items-center justify-between gap-1">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white sm:text-[11px]">
+                    Pro
+                  </p>
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-white px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-800 sm:gap-1 sm:px-2.5 sm:py-1 sm:text-[10px]">
+                    <Sparkles size={10} />
+                    Top
                   </span>
                 </div>
-                <p className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                <p className="mt-1.5 text-2xl font-semibold tracking-tight text-white sm:mt-2 sm:text-4xl">
                   {price.amount} €
-                  <span className="text-base font-semibold text-white/85"> /{price.period}</span>
+                  <span className="text-xs font-semibold text-white/85 sm:text-base">
+                    {" "}
+                    /{price.period}
+                  </span>
                 </p>
-                <p className="mt-1 text-sm font-medium text-fuchsia-100">{price.note}</p>
-                <ul className="mt-4 space-y-2.5">
+                <p className="mt-1 text-[11px] font-medium leading-snug text-fuchsia-100 sm:text-sm">
+                  {price.note}
+                </p>
+                <ul className="mt-3 flex-1 space-y-2 sm:mt-4 sm:space-y-2.5">
                   {PRO_FEATURES.map((f) => (
-                    <FeatureRow key={f.label} ok={f.ok} label={f.label} onDark />
+                    <FeatureRow key={f.label} ok={f.ok} label={f.label} onDark compact />
                   ))}
                 </ul>
                 {isOwner ? (
                   <button
                     type="button"
                     onClick={goPro}
-                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-violet-900 shadow-md transition active:scale-[0.98] hover:bg-fuchsia-50"
+                    className="mt-4 flex w-full items-center justify-center gap-1 rounded-lg bg-white py-2.5 text-xs font-bold text-violet-900 shadow-md transition active:scale-[0.98] hover:bg-fuchsia-50 sm:mt-5 sm:gap-2 sm:rounded-xl sm:py-3 sm:text-sm"
                   >
-                    <Zap size={16} fill="currentColor" />
-                    Activar Pro {billing === "annual" ? "anual" : "mensual"}
+                    <Zap size={14} fill="currentColor" />
+                    Activar Pro
                   </button>
                 ) : (
-                  <p className="mt-5 rounded-xl bg-black/20 px-3 py-2.5 text-center text-xs font-medium text-white">
-                    Pide al dueño del negocio que active Pro en Ajustes.
+                  <p className="mt-4 rounded-lg bg-black/20 px-2 py-2 text-center text-[10px] font-medium text-white sm:mt-5 sm:rounded-xl sm:px-3 sm:py-2.5 sm:text-xs">
+                    Pide al dueño que active Pro.
                   </p>
                 )}
-              </div>
-
-              <div className="order-2 flex flex-col rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:order-1 sm:p-5">
-                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-500">Free</p>
-                <p className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
-                  0 €
-                  <span className="text-base font-semibold text-zinc-500"> /siempre</span>
-                </p>
-                <p className="mt-1 text-sm font-medium text-zinc-600">Ideal para probar el picking</p>
-                <ul className="mt-4 space-y-2.5">
-                  {FREE_FEATURES.map((f) => (
-                    <FeatureRow key={f.label} ok={f.ok} label={f.label} />
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="mt-5 w-full rounded-xl border-2 border-zinc-200 bg-zinc-50 py-3 text-sm font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white"
-                >
-                  Seguir en Free
-                </button>
               </div>
             </div>
 
