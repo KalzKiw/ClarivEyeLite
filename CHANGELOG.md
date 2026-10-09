@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.14 — 2026-10-09
+
+### Lite — PackSpinner como carga
+- Escena outbound pesada retirada; `PackSpinner` / `LoadingMark` (caja embala y sale, ~3.6 s).
+- Login desktop: marca + spinner; móvil sin franja 3D.
+
 ## 0.3.13 — 2026-10-09
 
 ### Login — bultos embalados en el fill

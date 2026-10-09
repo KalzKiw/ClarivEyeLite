@@ -1,10 +1,13 @@
 import { Component, Suspense, type ReactNode } from "react";
-import { OutboundScene } from "@/components/OutboundScene";
+import { LoadingMark, PackSpinner } from "@/components/PackSpinner";
 import { cn } from "@/lib/cn";
 
 type Props = {
   className?: string;
+  /** @deprecated Ignorado: el spinner unifica tamaños vía size */
   compact?: boolean;
+  size?: "sm" | "md" | "lg";
+  label?: string;
 };
 
 class SceneErrorBoundary extends Component<{ fallback: ReactNode; children: ReactNode }, { err: boolean }> {
@@ -18,31 +21,13 @@ class SceneErrorBoundary extends Component<{ fallback: ReactNode; children: Reac
   }
 }
 
-function Fallback({ compact }: { compact?: boolean }) {
+/** Marca visual ligera: PackSpinner (sustituye la escena outbound pesada). */
+export function OutboundArt({ className, size = "lg", label }: Props) {
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center bg-[#0b1a2e]",
-        compact ? "h-full w-full" : "absolute inset-0",
-      )}
-      role="status"
-      aria-live="polite"
-    >
-      <div className="flex flex-col items-center gap-3 px-4">
-        <div className="h-10 w-10 animate-pulse rounded-lg bg-[#1e3a5f] ring-1 ring-[#3b82f6]/40" />
-        <p className="text-sm font-medium text-white/70">Cargando escena…</p>
-      </div>
-    </div>
-  );
-}
-
-/** Panel visual: escena 3D (R3F) con fallback sólido si WebGL falla. */
-export function OutboundArt({ className, compact = false }: Props) {
-  return (
-    <div className={cn("relative h-full w-full overflow-hidden", className)}>
-      <SceneErrorBoundary fallback={<Fallback compact={compact} />}>
-        <Suspense fallback={<Fallback compact={compact} />}>
-          <OutboundScene compact={compact} />
+    <div className={cn("relative flex h-full w-full items-center justify-center overflow-hidden bg-[#0b1a2e]", className)}>
+      <SceneErrorBoundary fallback={<LoadingMark fill label={label ?? "Cargando…"} size={size} />}>
+        <Suspense fallback={<LoadingMark fill label={label ?? "Cargando…"} size={size} />}>
+          <PackSpinner size={size} label={label} />
         </Suspense>
       </SceneErrorBoundary>
     </div>

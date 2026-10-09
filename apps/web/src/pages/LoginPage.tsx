@@ -4,6 +4,7 @@ import { lazy, Suspense, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthField } from "@/components/AuthField";
 import { ClarivBox } from "@/components/ClarivBox";
+import { LoadingMark } from "@/components/PackSpinner";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, ErrorNote } from "@/components/ui";
 import { hasAnyAccount } from "@/lib/auth";
@@ -11,8 +12,8 @@ import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
 
 /** Lazy: three.js no bloquea el primer paint del form */
-const OutboundArt = lazy(() =>
-  import("@/components/OutboundArt").then((m) => ({ default: m.OutboundArt })),
+const PackSpinner = lazy(() =>
+  import("@/components/PackSpinner").then((m) => ({ default: m.PackSpinner })),
 );
 
 const REGISTER_STEPS = ["Tus datos", "Contraseña"] as const;
@@ -108,48 +109,25 @@ export function LoginPage() {
   return (
     <div data-login className="min-h-dvh bg-[hsl(var(--login-surface))] text-[hsl(var(--login-ink))]">
       <div className="grid min-h-dvh lg:grid-cols-2">
-        {/* Panel marca + 3D */}
-        <aside className="relative hidden min-h-dvh lg:block">
-          <Suspense
-            fallback={
-              <div className="absolute inset-0 flex items-center justify-center bg-[#0b1a2e]">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-10 w-10 animate-pulse rounded-lg bg-[#1e3a5f] ring-1 ring-[#3b82f6]/40" />
-                  <p className="text-sm font-medium text-white/70">Cargando escena…</p>
-                </div>
-              </div>
-            }
-          >
-            <OutboundArt className="absolute inset-0 h-full w-full" />
-          </Suspense>
-
-          {/* Nombre solo arriba a la izquierda (nada abajo) */}
-          <div className="pointer-events-none absolute left-0 top-0 z-20 p-8 xl:p-10">
-            <div className="pointer-events-auto rounded-xl bg-[#0a1628]/45 px-3 py-2 backdrop-blur-[2px]">
-              {brandBar}
+        {/* Panel marca + spinner pack (lite) */}
+        <aside className="relative hidden min-h-dvh overflow-hidden bg-[#0b1a2e] lg:block">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,#1e3a5f_0%,transparent_55%),radial-gradient(ellipse_at_80%_80%,#12263f_0%,#0b1a2e_60%)]" />
+          <div className="relative z-10 flex h-full flex-col p-8 xl:p-10">
+            {brandBar}
+            <div className="flex flex-1 items-center justify-center">
+              <Suspense fallback={<LoadingMark label="Cargando…" size="lg" />}>
+                <PackSpinner size="lg" label="Preparando envíos…" />
+              </Suspense>
             </div>
+            <p className="text-center text-sm text-white/45">ClarivEye Lite · almacén sin fricción</p>
           </div>
         </aside>
 
         <main className="flex flex-col">
-          {/* Móvil: nombre arriba a la izquierda + escena */}
-          <div className="lg:hidden">
-            <div className="flex items-center gap-3 bg-[#10253f] px-5 py-4">
-              <ClarivBox size={32} className="brightness-125" />
-              <span className="font-display text-lg font-semibold text-white">ClarivEye Lite</span>
-            </div>
-            <div className="relative h-36">
-              <Suspense
-                fallback={
-                  <div className="flex h-full w-full items-center justify-center bg-[#0b1a2e]">
-                    <p className="text-xs font-medium text-white/60">Cargando escena…</p>
-                  </div>
-                }
-              >
-                <OutboundArt compact className="h-full w-full" />
-              </Suspense>
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[hsl(var(--login-surface))] to-transparent" />
-            </div>
+          {/* Móvil: solo marca (sin escena pesada) */}
+          <div className="flex items-center gap-3 bg-[#10253f] px-5 py-4 lg:hidden">
+            <ClarivBox size={32} className="brightness-125" />
+            <span className="font-display text-lg font-semibold text-white">ClarivEye Lite</span>
           </div>
 
           <div className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-10">
