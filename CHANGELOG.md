@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.11 — 2026-10-09
+
+### Login — pack cartoon con contenido + puff
+- Caja abierta: 3 ítems caen al interior (fill), tapa con overshoot, cinta + etiqueta pop.
+- Salida ship: squash/stretch, speed streaks y puff burst procedural (~6.2 s loop).
+
 ## 0.3.10 — 2026-10-09
 
 ### Login — almacén vivo, no solo scan en loop
