@@ -71,6 +71,12 @@ body {
   font-family: "Fraunces", ui-serif, Georgia, serif;
 }
 
+/* Login — superficie “mostrador” (no cream terracotta) */
+[data-login] {
+  --login-surface: 210 28% 98%;
+  --login-ink: 222 35% 12%;
+}
+
 body:has([data-slot="sheet-content"][data-state="open"]) .bottom-nav,
 body:has([role="dialog"][data-state="open"]) .bottom-nav {
   opacity: 0;

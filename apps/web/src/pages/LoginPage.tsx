@@ -1,9 +1,10 @@
-import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Building2, Lock, Mail, Package, ScanLine, User } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ArrowLeft, ArrowRight, Building2, Lock, Mail, User } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthField } from "@/components/AuthField";
 import { ClarivBox } from "@/components/ClarivBox";
+import { OutboundArt } from "@/components/OutboundArt";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, ErrorNote } from "@/components/ui";
 import { hasAnyAccount } from "@/lib/auth";
@@ -12,14 +13,8 @@ import { cn } from "@/lib/cn";
 
 const REGISTER_STEPS = ["Negocio", "Tú", "Contraseña"] as const;
 
-const fade = {
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-  transition: { duration: 0.22 },
-};
-
 export function LoginPage() {
+  const reduce = useReducedMotion();
   const { user, login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">(() =>
     hasAnyAccount() ? "login" : "register",
@@ -33,6 +28,15 @@ export function LoginPage() {
   const [businessName, setBusinessName] = useState("");
 
   if (user) return <Navigate to="/" replace />;
+
+  const fade = reduce
+    ? { initial: { opacity: 1 }, animate: { opacity: 1 }, exit: { opacity: 1 } }
+    : {
+        initial: { opacity: 0, y: 8 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+        transition: { duration: 0.2 },
+      };
 
   function switchMode(next: "login" | "register") {
     setMode(next);
@@ -90,93 +94,78 @@ export function LoginPage() {
     }
   }
 
+  const ctaClass =
+    "h-[52px] w-full gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-[0.98] hover:shadow-[0_0_0_3px_hsl(28_90%_48%/0.25)]";
+
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-[#f4f7fb]">
-      {/* atmósfera */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-primary/20 blur-3xl" />
-        <div className="absolute bottom-0 right-0 h-96 w-96 rounded-full bg-sky-300/25 blur-3xl" />
-        <div
-          className="absolute inset-0 opacity-[0.35]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, hsl(221 40% 70% / 0.35) 1px, transparent 0)",
-            backgroundSize: "22px 22px",
-          }}
-        />
-      </div>
+    <div data-login className="min-h-dvh bg-[hsl(var(--login-surface))] text-[hsl(var(--login-ink))]">
+      <div className="grid min-h-dvh lg:grid-cols-2">
+        {/* —— Marca full-bleed —— */}
+        <aside className="relative hidden min-h-dvh flex-col text-white lg:flex">
+          <OutboundArt className="absolute inset-0" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[hsl(221_55%_12%/0.85)] via-[hsl(221_55%_18%/0.35)] to-transparent" />
 
-      <div className="relative mx-auto grid min-h-dvh max-w-5xl lg:grid-cols-[1.05fr_0.95fr]">
-        {/* marca / hero */}
-        <aside className="hidden flex-col justify-between p-10 text-primary-foreground lg:flex lg:bg-primary lg:shadow-2xl">
-          <div className="flex items-center gap-3">
-            <ClarivBox size={40} className="brightness-125" />
-            <span className="font-display text-xl font-semibold tracking-tight">ClarivEye Lite</span>
-          </div>
-
-          <div className="space-y-6">
-            <motion.h2
-              className="font-display text-4xl font-semibold leading-[1.15] tracking-tight"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-            >
-              Del albarán al picking
-              <br />
-              en un solo gesto.
-            </motion.h2>
-            <motion.p
-              className="max-w-sm text-sm leading-relaxed text-primary-foreground/85"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12 }}
-            >
-              Sube el PDF, confirma productos y entrega con barcode. ClarivScan va dentro — sin
-              cambiar de app.
-            </motion.p>
-            <ul className="space-y-3 text-sm text-primary-foreground/90">
-              <li className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
-                  <ScanLine size={16} />
-                </span>
-                Lee PDF o foto del documento
-              </li>
-              <li className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
-                  <Package size={16} />
-                </span>
-                Pedido listo para el almacén
-              </li>
-            </ul>
-          </div>
-
-          <p className="text-[11px] text-primary-foreground/65">Freemium · datos por negocio</p>
-        </aside>
-
-        {/* formulario */}
-        <main className="flex flex-col justify-center px-4 py-10 sm:px-8">
-          <div className="mx-auto w-full max-w-[400px] space-y-6">
-            <div className="flex flex-col items-center gap-3 text-center lg:items-start lg:text-left">
-              <div className="lg:hidden">
-                <ClarivBox size={56} />
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                  {mode === "login" ? "Bienvenido" : "Alta de negocio"}
-                </p>
-                <h1 className="font-display mt-1 text-3xl font-semibold tracking-tight text-foreground">
-                  {mode === "login" ? "Entra a tu almacén" : "Crea tu cuenta"}
-                </h1>
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  {mode === "login"
-                    ? "Email y contraseña del negocio."
-                    : "Tres pasos cortos. Un negocio, sus pedidos."}
-                </p>
-              </div>
+          <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-12">
+            <div className="flex items-center gap-3">
+              <ClarivBox size={36} className="brightness-125" />
+              <span className="font-display text-xl font-semibold tracking-tight">ClarivEye Lite</span>
             </div>
 
-            <div className="overflow-hidden rounded-2xl border border-white/60 bg-white/75 p-5 shadow-[0_20px_50px_-28px_rgba(37,99,235,0.45)] backdrop-blur-md sm:p-6">
-              <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-slate-100/90 p-1">
+            <div className="max-w-md space-y-3 pb-4">
+              <motion.h2
+                className="font-display text-[2.65rem] font-semibold leading-[1.12] tracking-tight"
+                initial={reduce ? false : { opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+              >
+                ClarivEye Lite
+              </motion.h2>
+              <motion.p
+                className="text-base leading-relaxed text-white/80"
+                initial={reduce ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: 0.06 }}
+              >
+                Del albarán al picking — un solo gesto.
+              </motion.p>
+            </div>
+          </div>
+        </aside>
+
+        {/* —— Formulario (mostrador) —— */}
+        <main className="flex flex-col">
+          {/* Hero móvil */}
+          <div className="relative lg:hidden">
+            <OutboundArt compact className="h-44 w-full" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--login-surface))] via-[hsl(var(--login-surface)/0.35)] to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-5 pb-4">
+              <ClarivBox size={40} />
+              <div>
+                <p className="font-display text-xl font-semibold leading-none text-[hsl(var(--login-ink))]">
+                  ClarivEye Lite
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Del albarán al picking</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-10">
+            <div className="mx-auto w-full max-w-[400px] space-y-7">
+              <header className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+                  {mode === "login" ? "Acceso" : "Alta"}
+                </p>
+                <h1 className="font-display text-[1.85rem] font-semibold tracking-tight">
+                  {mode === "login" ? "Entra a tu almacén" : "Crea tu negocio"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {mode === "login"
+                    ? "Email y contraseña del negocio."
+                    : "Tres pasos. Un negocio, sus pedidos."}
+                </p>
+              </header>
+
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-[hsl(var(--login-ink)/0.05)] p-1">
                 {(
                   [
                     ["login", "Entrar"],
@@ -188,9 +177,9 @@ export function LoginPage() {
                     type="button"
                     onClick={() => switchMode(id)}
                     className={cn(
-                      "rounded-lg py-2.5 text-sm font-medium transition",
+                      "rounded-lg py-2.5 text-sm font-semibold transition",
                       mode === id
-                        ? "bg-white text-foreground shadow-sm"
+                        ? "bg-[hsl(var(--login-surface))] text-[hsl(var(--login-ink))] shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
@@ -201,12 +190,7 @@ export function LoginPage() {
 
               <AnimatePresence mode="wait">
                 {mode === "login" ? (
-                  <motion.form
-                    key="login"
-                    {...fade}
-                    onSubmit={onLogin}
-                    className="space-y-4"
-                  >
+                  <motion.form key="login" {...fade} onSubmit={onLogin} className="space-y-4">
                     <AuthField
                       label="Email"
                       icon={Mail}
@@ -228,15 +212,15 @@ export function LoginPage() {
                       minLength={4}
                     />
                     <ErrorNote message={error} />
-                    <Button type="submit" className="h-12 w-full gap-2 rounded-xl text-[15px]">
+                    <Button type="submit" className={ctaClass}>
                       Entrar
-                      <ArrowRight size={16} />
+                      <ArrowRight size={17} />
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">
                       ¿Primera vez?{" "}
                       <button
                         type="button"
-                        className="font-medium text-primary underline-offset-2 hover:underline"
+                        className="font-semibold text-primary underline-offset-2 hover:underline"
                         onClick={() => switchMode("register")}
                       >
                         Crear cuenta
@@ -268,9 +252,9 @@ export function LoginPage() {
                           required
                         />
                         <ErrorNote message={error} />
-                        <Button type="submit" className="h-12 w-full gap-2 rounded-xl">
+                        <Button type="submit" className={ctaClass}>
                           Continuar
-                          <ArrowRight size={16} />
+                          <ArrowRight size={17} />
                         </Button>
                       </form>
                     ) : null}
@@ -285,7 +269,7 @@ export function LoginPage() {
                       >
                         <p className="text-sm text-muted-foreground">
                           Tú serás el dueño de{" "}
-                          <span className="font-medium text-foreground">{businessName}</span>.
+                          <span className="font-semibold text-foreground">{businessName}</span>.
                         </p>
                         <AuthField
                           label="Tu nombre"
@@ -311,13 +295,13 @@ export function LoginPage() {
                           <Button
                             type="button"
                             variant="ghost"
-                            className="h-12 gap-1.5 rounded-xl"
+                            className="h-[52px] gap-1.5 rounded-xl"
                             onClick={() => setStep(1)}
                           >
                             <ArrowLeft size={16} />
                             Atrás
                           </Button>
-                          <Button type="submit" className="h-12 gap-1.5 rounded-xl">
+                          <Button type="submit" className={cn(ctaClass, "w-auto")}>
                             Continuar
                             <ArrowRight size={16} />
                           </Button>
@@ -361,7 +345,7 @@ export function LoginPage() {
                           <Button
                             type="button"
                             variant="ghost"
-                            className="h-12 gap-1.5 rounded-xl"
+                            className="h-[52px] gap-1.5 rounded-xl"
                             onClick={() => setStep(2)}
                           >
                             <ArrowLeft size={16} />
@@ -369,7 +353,7 @@ export function LoginPage() {
                           </Button>
                           <Button
                             type="submit"
-                            className="h-12 rounded-xl"
+                            className={cn(ctaClass, "w-auto")}
                             disabled={!!password2 && password !== password2}
                           >
                             Crear y entrar

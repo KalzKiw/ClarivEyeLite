@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.4 — 2026-10-09
+
+### Login v2 — “muelle de salida”
+- Panel full-bleed con ilustración SVG propia (pasillo + haz de scan animado).
+- Formulario quiet (sin card glass); campos tablet 52px; CTA con acento ámbar en hover.
+- Hero móvil con la misma arte; marca ClarivEye Lite como señal principal.
+
 ## 0.3.3 — 2026-10-09
 
 ### Login

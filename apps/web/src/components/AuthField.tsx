@@ -12,26 +12,27 @@ export function AuthField({ label, icon: Icon, hint, className, type, ...props }
   const [show, setShow] = useState(false);
   const isPassword = type === "password";
   const inputType = isPassword && show ? "text" : type;
+  const hintError = hint?.toLowerCase().includes("coinciden");
 
   return (
     <label className="block space-y-1.5">
-      <span className="text-[13px] font-medium text-foreground/80">{label}</span>
+      <span className="text-[13px] font-semibold text-[hsl(var(--login-ink)/0.75)]">{label}</span>
       <div className="relative">
         {Icon ? (
           <Icon
-            size={17}
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            size={18}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
         ) : null}
         <input
           {...props}
           type={inputType}
           className={cn(
-            "w-full rounded-xl border border-border/80 bg-white/80 px-3 py-3 text-[15px] outline-none backdrop-blur transition",
-            "placeholder:text-muted-foreground/60",
-            "focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/15",
-            Icon && "pl-10",
-            isPassword && "pr-11",
+            "h-[52px] w-full rounded-xl border-2 border-[hsl(var(--login-ink)/0.1)] bg-[hsl(var(--login-surface))] px-3.5 text-[16px] outline-none transition",
+            "placeholder:text-muted-foreground/55",
+            "focus:border-primary focus:ring-[3px] focus:ring-primary/20",
+            Icon && "pl-11",
+            isPassword && "pr-12",
             className,
           )}
         />
@@ -39,15 +40,19 @@ export function AuthField({ label, icon: Icon, hint, className, type, ...props }
           <button
             type="button"
             tabIndex={-1}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
             onClick={() => setShow((s) => !s)}
             aria-label={show ? "Ocultar contraseña" : "Mostrar contraseña"}
           >
-            {show ? <EyeOff size={17} /> : <Eye size={17} />}
+            {show ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         ) : null}
       </div>
-      {hint ? <span className="text-[11px] text-muted-foreground">{hint}</span> : null}
+      {hint ? (
+        <span className={cn("text-[11px]", hintError ? "text-destructive" : "text-muted-foreground")}>
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }
