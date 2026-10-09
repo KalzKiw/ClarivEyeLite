@@ -1,5 +1,10 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.15 — 2026-10-09
+
+### PackSpinner — solo caja, fill + giro
+- Canvas transparente (sin fondo/suelo); loop: llega → 3 cajitas → cierra → gira → whoosh (~4.4 s).
+
 ## 0.3.14 — 2026-10-09
 
 ### Lite — PackSpinner como carga
