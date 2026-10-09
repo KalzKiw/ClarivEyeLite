@@ -257,10 +257,7 @@ export function ClarivScanPage() {
   }
 
   function refreshPlanGate() {
-    const orders = loadOrders();
-    const plan = loadPlan();
-    setOpenCount(countOpenOrders(orders));
-    setFreeBlocked(!canCreateOrder(orders, plan));
+    setOpenCount(countOpenOrders(loadOrders()));
   }
 
   function confirmOrder() {
@@ -558,7 +555,7 @@ export function ClarivScanPage() {
         onClick={confirmOrder}
         className="w-full gap-2"
       >
-        <FileUp size={16} />
+        <CheckCircle2 size={16} />
         {suspiciousPending > 0
           ? `Confirma o excluye ${suspiciousPending} sospechosa(s)`
           : `Crear pedido · ${includedCount} línea(s)`}
