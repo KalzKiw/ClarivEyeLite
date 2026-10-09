@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.8 — 2026-10-09
+
+### Login — scan por caja
+- Halo ámbar se adapta (posición + tamaño) a cada cartón del pallet; `pointLight` sigue el corte.
+- Ciclo caja-a-caja (~7 s): approach → slice → hit; pistola al `aimPoint`; flash de etiqueta en la activa.
+
 ## 0.3.7 — 2026-10-09
 
 ### Login — loop de scan sincronizado

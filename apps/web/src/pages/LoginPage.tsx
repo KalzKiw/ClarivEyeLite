@@ -99,7 +99,7 @@ export function LoginPage() {
   const brandBar = (
     <div className="flex items-center gap-3">
       <ClarivBox size={34} className="brightness-125" />
-      <span className="font-display text-xl font-semibold tracking-tight text-white">
+      <span className="font-display text-xl font-semibold tracking-tight text-white drop-shadow-md">
         ClarivEye Lite
       </span>
     </div>
@@ -109,7 +109,7 @@ export function LoginPage() {
     <div data-login className="min-h-dvh bg-[hsl(var(--login-surface))] text-[hsl(var(--login-ink))]">
       <div className="grid min-h-dvh lg:grid-cols-2">
         {/* Panel marca + 3D */}
-        <aside className="relative hidden min-h-dvh flex-col lg:flex">
+        <aside className="relative hidden min-h-dvh lg:block">
           <Suspense
             fallback={
               <div className="absolute inset-0 flex items-center justify-center bg-[#0b1a2e]">
@@ -122,21 +122,17 @@ export function LoginPage() {
           >
             <OutboundArt className="absolute inset-0 h-full w-full" />
           </Suspense>
-          {/* Solo abajo (~30%): legibilidad del tagline; arriba transparente */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t from-[#0a1628]/95 via-[#0a1628]/40 to-transparent" />
 
-          {/* Título SIEMPRE arriba */}
-          <div className="relative z-10 p-8 xl:p-10">{brandBar}</div>
-
-          <div className="relative z-10 mt-auto max-w-md space-y-2 p-8 xl:p-10">
-            <p className="font-display text-2xl font-semibold leading-snug text-white/95">
-              Del albarán al picking — un solo gesto.
-            </p>
+          {/* Nombre solo arriba a la izquierda (nada abajo) */}
+          <div className="pointer-events-none absolute left-0 top-0 z-20 p-8 xl:p-10">
+            <div className="pointer-events-auto rounded-xl bg-[#0a1628]/45 px-3 py-2 backdrop-blur-[2px]">
+              {brandBar}
+            </div>
           </div>
         </aside>
 
         <main className="flex flex-col">
-          {/* Móvil: título arriba + escena compacta */}
+          {/* Móvil: nombre arriba a la izquierda + escena */}
           <div className="lg:hidden">
             <div className="flex items-center gap-3 bg-[#10253f] px-5 py-4">
               <ClarivBox size={32} className="brightness-125" />
