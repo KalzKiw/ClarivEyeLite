@@ -126,7 +126,7 @@ function ensureY(doc: jsPDF, y: number, need: number): number {
 /** Logo oficial ClarivEye (mismo asset que ClarivEye Oficial / privado). */
 async function loadLogoDataUrl(): Promise<string | null> {
   try {
-    const response = await fetch("/icons/logopdf.png");
+    const response = await fetch("/icons/clariv-eye.png");
     if (!response.ok) return null;
     const blob = await response.blob();
     return await new Promise((resolve, reject) => {
