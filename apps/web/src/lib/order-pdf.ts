@@ -193,36 +193,38 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   let y = MARGIN;
 
-  // —— Cabecera ——
-  const headerH = 30;
-  doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, PAGE_W, headerH, "F");
-
-  const logoSize = 18;
+  // —— Cabecera (sin franja azul: ahorro de tinta; el azul solo en tablas) ——
+  const logoSize = 22;
   let textLeft = MARGIN;
   if (logoImg) {
-    // Fondo blanco suave detrás del logo para que se lea bien sobre azul
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(MARGIN - 1, 6, logoSize + 2, logoSize + 2, 2, 2, "F");
-    doc.addImage(logoImg, "PNG", MARGIN, 7, logoSize, logoSize);
+    // Logo oficial ClarivEye (caja + wordmark) sobre blanco
+    doc.addImage(logoImg, "PNG", MARGIN, y - 2, logoSize, logoSize);
     textLeft = MARGIN + logoSize + 5;
   }
 
-  doc.setTextColor(255, 255, 255);
+  // El PNG ya lleva “CLARIVEYE”; al lado solo producto + tipo de doc
+  doc.setTextColor(...PRIMARY);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text("ClarivEye Lite", textLeft, 13);
-  doc.setFontSize(9);
+  doc.setFontSize(11);
+  doc.text("Lite", textLeft, y + 5);
   doc.setFont("helvetica", "normal");
-  doc.text("Orden de picking / Comprobante", textLeft, 20);
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  doc.text("Orden de picking / Comprobante", textLeft, y + 11);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(businessName, CONTENT_RIGHT, 13, { align: "right" });
+  doc.setTextColor(...INK);
+  doc.text(businessName, CONTENT_RIGHT, y + 5, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, 20, { align: "right" });
+  doc.setTextColor(...MUTED);
+  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, y + 11, { align: "right" });
 
-  y = headerH + 10;
+  y = MARGIN + logoSize + 4;
+  doc.setDrawColor(210, 210, 215);
+  doc.setLineWidth(0.35);
+  doc.line(MARGIN, y, CONTENT_RIGHT, y);
+  y += 8;
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
