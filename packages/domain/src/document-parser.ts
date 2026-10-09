@@ -4,6 +4,8 @@
  * Tolera OCR ruidoso (sin saltos, precios con coma, headers basura).
  */
 
+import { extractDocumentDate } from "./ocr-normalize";
+
 export type DocumentType =
   | "orden_compra"
   | "albaran"
@@ -23,6 +25,8 @@ export type DocumentLine = {
 
 export type DocumentParseResult = {
   documentNumber: string | null;
+  /** Fecha del documento YYYY-MM-DD si se pudo leer */
+  documentDate?: string | null;
   documentType: DocumentType;
   lines: DocumentLine[];
   raw_text: string;
@@ -311,8 +315,9 @@ export function parseDocumentOCR(rawText: string): DocumentParseResult {
     return (ia < 0 ? 99999 : ia) - (ib < 0 ? 99999 : ib);
   });
   lines = applyBultoHints(raw_text, lines);
+  const documentDate = extractDocumentDate(raw_text);
 
-  return { documentNumber, documentType, lines, raw_text };
+  return { documentNumber, documentDate, documentType, lines, raw_text };
 }
 
 /** Compat: primera línea → API antigua de etiqueta */

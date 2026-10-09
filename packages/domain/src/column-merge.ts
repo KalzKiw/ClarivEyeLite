@@ -1,6 +1,7 @@
 import { type DocumentLine, type DocumentParseResult, type DocumentType } from "./document-parser";
 import { parseAnyDocument } from "./document-profiles";
 import { isProductLine } from "./line-role";
+import { extractDocumentDate } from "./ocr-normalize";
 import { isJunkContent, scoreParseResult } from "./quality-gate";
 
 /** Una fila de tabla (co-ocurrencia SKU + desc + nums). */
@@ -377,6 +378,7 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
 
   const columnDoc: DocumentParseResult = {
     documentNumber: extractDocNumber(joined),
+    documentDate: extractDocumentDate(joined),
     documentType: detectType(joined),
     lines,
     raw_text: joined,
@@ -400,6 +402,7 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
       ...anyDoc,
       raw_text: anyDoc.raw_text || joined,
       documentNumber: anyDoc.documentNumber || columnDoc.documentNumber,
+      documentDate: anyDoc.documentDate || columnDoc.documentDate || null,
     };
   }
 

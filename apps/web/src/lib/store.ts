@@ -65,10 +65,12 @@ export function newId() {
 export function createOrderFromLines(
   docNumber: string,
   lines: Array<Omit<OrderLine, "id" | "picked">>,
+  docDate?: string | null,
 ): Order {
   return {
     id: newId(),
     docNumber: docNumber || `DOC-${Date.now().toString().slice(-6)}`,
+    docDate: docDate || null,
     status: "por_preparar",
     notes: null,
     lines: lines.map((line) => ({ ...line, id: newId(), picked: false })),

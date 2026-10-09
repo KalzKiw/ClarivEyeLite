@@ -21,6 +21,7 @@ interface DraftLine {
   name: string;
   quantity: number;
   packages: number;
+  unitPrice: string;
   included: boolean;
   suspicious: boolean;
   warnings: LineWarning[];
@@ -55,6 +56,7 @@ function draftFromParsed(line: {
     name: audited.name ?? "",
     quantity: audited.quantity,
     packages: audited.packages,
+    unitPrice: audited.unitPrice ?? "",
     included: !audited.suspicious,
     suspicious: audited.suspicious,
     warnings: audited.warnings,
@@ -68,7 +70,7 @@ function reauditDraft(line: DraftLine): DraftLine {
     name: line.name.trim() || null,
     quantity: line.quantity,
     packages: line.packages,
-    unitPrice: null,
+    unitPrice: line.unitPrice.trim() || null,
     confidence: line.suspicious && !line.confirmed ? 0.55 : 0.9,
   });
   return {
@@ -82,6 +84,7 @@ export function ClarivScanPage() {
   const navigate = useNavigate();
   const trainedProfile = getActiveDocProfile();
   const [docNumber, setDocNumber] = useState("");
+  const [docDate, setDocDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -121,6 +124,7 @@ export function ClarivScanPage() {
       const profileLabel = parsed.profile ? ` · ${parsed.profile}` : "";
       setDocType(`${parsed.documentType}${profileLabel}`);
       if (parsed.documentNumber) setDocNumber(parsed.documentNumber);
+      if (parsed.documentDate) setDocDate(parsed.documentDate);
 
       setAssisted(!!parsed.assisted);
       setCandidates(parsed.candidates ?? []);
@@ -168,6 +172,7 @@ export function ClarivScanPage() {
         name: "",
         quantity: 1,
         packages: 0,
+        unitPrice: "",
         included: true,
         suspicious: false,
         warnings: [],
@@ -263,13 +268,14 @@ export function ClarivScanPage() {
         name: line.name.trim() || null,
         quantity: Math.max(1, Number(line.quantity) || 1),
         packages: Math.max(0, Number(line.packages) || 0),
+        unitPrice: line.unitPrice.trim() || null,
       }))
       .filter((line) => line.reference);
     if (clean.length === 0) {
       setError("Incluye al menos un producto con referencia (marca la casilla)");
       return;
     }
-    const order = createOrderFromLines(docNumber, clean);
+    const order = createOrderFromLines(docNumber, clean, docDate || null);
     saveOrders([order, ...orders]);
     navigate("/");
   }
@@ -408,13 +414,22 @@ export function ClarivScanPage() {
         </Button>
       </div>
 
-      <Field label="Nº documento">
-        <TextInput
-          value={docNumber}
-          onChange={(event) => setDocNumber(event.target.value)}
-          placeholder="OC 00005 / ALB-…"
-        />
-      </Field>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Nº documento / albarán">
+          <TextInput
+            value={docNumber}
+            onChange={(event) => setDocNumber(event.target.value)}
+            placeholder="OC 00005 / ALB-…"
+          />
+        </Field>
+        <Field label="Fecha">
+          <TextInput
+            type="date"
+            value={docDate}
+            onChange={(event) => setDocDate(event.target.value)}
+          />
+        </Field>
+      </div>
 
       {source || docType ? (
         <p className="text-xs text-muted-foreground">
@@ -517,7 +532,7 @@ export function ClarivScanPage() {
                 placeholder="Ej. Producto X"
               />
             </Field>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <Field label="Cantidad (uds)">
                 <TextInput
                   type="number"
@@ -532,6 +547,13 @@ export function ClarivScanPage() {
                   min={0}
                   value={line.packages}
                   onChange={(event) => updateLine(index, { packages: Number(event.target.value) })}
+                />
+              </Field>
+              <Field label="Precio">
+                <TextInput
+                  value={line.unitPrice}
+                  onChange={(event) => updateLine(index, { unitPrice: event.target.value })}
+                  placeholder="—"
                 />
               </Field>
             </div>

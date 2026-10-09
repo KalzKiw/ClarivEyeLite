@@ -10,6 +10,7 @@ import {
   type DocumentType,
 } from "./document-parser";
 import { isNonProductText, looksLikeArticleSku } from "./line-role";
+import { extractDocumentDate, extractShapedProductLines, normalizeOcrCode } from "./ocr-normalize";
 
 export type DocumentProfile =
   | "easywms"
@@ -271,17 +272,25 @@ function extractPickingList(text: string): DocumentLine[] {
   return dedupe(out);
 }
 
-/** fashion: SKU000002 - Pantalón Génova … 20  15,00€ */
+/** fashion: SKU000002 - Pantalón Génova … 20  15,00€ (+ OCR SKUO 00009 / 700€) */
 function extractFashionSku(text: string): DocumentLine[] {
   const out: DocumentLine[] = [];
   const re =
     /\b(SKU\d{5,})\s*[-–]\s*([^\n]+?)\s+(\d{1,5})\s+(\d+[.,]\d{2})\s*€?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
-    // nombre puede traer descripción extra en la misma captura; cortar en salto lógico
     let name = m[2].trim();
     name = name.replace(/\s+\d+[.,]\d{2}.*$/, "").trim();
     out.push(line(m[1].toUpperCase(), name, Number(m[3]), m[4].replace(",", "."), 0.93));
+  }
+  // OCR adaptable: forma de fila aunque el código/precio vengan rotos
+  const shaped = extractShapedProductLines(text, line);
+  for (const row of shaped) {
+    const ref = normalizeOcrCode(row.reference);
+    if (!/^SKU\d+/i.test(ref) && !/^ITEM\d+/i.test(ref)) continue;
+    if (!out.some((l) => l.reference.toUpperCase() === ref.toUpperCase())) {
+      out.push({ ...row, reference: ref.toUpperCase() });
+    }
   }
   return dedupe(out);
 }
@@ -692,8 +701,9 @@ export function parseWithProfile(rawText: string): ProfileParseResult {
   const profile = detectProfile(raw_text);
   const documentType = detectType(raw_text);
   const documentNumber = extractDocumentNumberForProfile(raw_text, profile);
+  const documentDate = extractDocumentDate(raw_text);
   const lines = extractByProfile(raw_text, profile);
-  return { profile, documentNumber, documentType, lines, raw_text };
+  return { profile, documentNumber, documentDate, documentType, lines, raw_text };
 }
 
 const ALL_PROFILES: DocumentProfile[] = [
@@ -716,9 +726,12 @@ export function parseAnyDocument(rawText: string): ProfileParseResult {
   const detected = detectProfile(raw_text);
   const generic = parseDocumentOCR(raw_text);
 
+  const documentDate = extractDocumentDate(raw_text) || generic.documentDate || null;
+
   let best: ProfileParseResult = {
     profile: detected,
     documentNumber: extractDocumentNumberForProfile(raw_text, detected) || generic.documentNumber,
+    documentDate,
     documentType: documentType !== "desconocido" ? documentType : generic.documentType,
     lines: [],
     raw_text,
@@ -735,6 +748,7 @@ export function parseAnyDocument(rawText: string): ProfileParseResult {
       best = {
         profile,
         documentNumber: extractDocumentNumberForProfile(raw_text, profile) || generic.documentNumber,
+        documentDate,
         documentType: documentType !== "desconocido" ? documentType : generic.documentType,
         lines,
         raw_text,
@@ -747,6 +761,7 @@ export function parseAnyDocument(rawText: string): ProfileParseResult {
     return {
       profile: detected === "generic" ? "generic" : detected,
       documentNumber: best.documentNumber || generic.documentNumber,
+      documentDate: best.documentDate || generic.documentDate || null,
       documentType: best.documentType !== "desconocido" ? best.documentType : generic.documentType,
       lines: generic.lines,
       raw_text: generic.raw_text || raw_text,
@@ -758,6 +773,7 @@ export function parseAnyDocument(rawText: string): ProfileParseResult {
       ...best,
       lines: generic.lines,
       documentNumber: best.documentNumber || generic.documentNumber,
+      documentDate: best.documentDate || generic.documentDate || null,
     };
   }
 

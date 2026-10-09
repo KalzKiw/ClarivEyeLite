@@ -5,6 +5,7 @@ export * from "./document-parser";
 export * from "./document-profiles";
 export * from "./es-postal";
 export * from "./line-audit";
+export * from "./ocr-normalize";
 export * from "./line-role";
 export * from "./orders";
 export * from "./order-token";

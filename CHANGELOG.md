@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.24 — 2026-10-09
+
+### Contrato lectura adaptable
+- `documentDate` + UI fecha; líneas con ref, nombre, qty, bultos, precio.
+- `ocr-normalize`: códigos OCR (SKUO→SKU0) y precios sin coma; extractor por forma de fila.
+- Fashion dirty recupera Bufanda `SKU000009` sin hardcode del nombre.
+
 ## 0.3.23 — 2026-10-09
 
 ### Clasificador estructural de líneas (deny-by-default)

@@ -7,12 +7,16 @@ export interface OrderLine {
   name: string | null;
   quantity: number;
   packages: number;
+  /** Precio unitario si el albarán lo traía */
+  unitPrice?: string | null;
   picked: boolean;
 }
 
 export interface Order {
   id: string;
   docNumber: string;
+  /** Fecha del albarán (YYYY-MM-DD) si se leyó */
+  docDate?: string | null;
   status: OrderStatus;
   notes: string | null;
   lines: OrderLine[];
