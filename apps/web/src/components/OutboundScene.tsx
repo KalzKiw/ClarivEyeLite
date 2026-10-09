@@ -7,35 +7,33 @@ import * as THREE from "three";
 /**
  * Loop pack cartoon (~8.4 s):
  * arrive → fill (coloca 3) → pack (2 solapas) → seal (giro + cinta + label) → ship → gap
- * Variantes por ciclo: paleta, sentido de giro, ángulo de cámara.
+ * Variantes por ciclo: layout de bultos, sentido de giro, ángulo de cámara.
  */
 const PERIOD = 8.4;
 
 type Phase = "arrive" | "fill" | "pack" | "seal" | "ship" | "gap";
 
-type ItemSpec = {
-  color: string;
-  size: readonly [number, number, number];
-  x: number;
-  z: number;
+type PackedKind = "carton" | "mailer" | "tube";
+
+const SLOT_POS = [
+  { x: -0.15, z: 0.05 },
+  { x: 0.07, z: -0.08 },
+  { x: 0.12, z: 0.09 },
+] as const;
+
+/** Altura del prefab (para asentar en el suelo interior). */
+const PACK_H: Record<PackedKind, number> = {
+  carton: 0.155,
+  mailer: 0.055,
+  tube: 0.17,
 };
 
-const PALETTES: ItemSpec[][] = [
-  [
-    { color: "#3b82f6", size: [0.14, 0.19, 0.14], x: -0.15, z: 0.05 },
-    { color: "#14b8a6", size: [0.17, 0.11, 0.15], x: 0.07, z: -0.08 },
-    { color: "#f59e0b", size: [0.19, 0.055, 0.13], x: 0.13, z: 0.1 },
-  ],
-  [
-    { color: "#ef4444", size: [0.13, 0.17, 0.13], x: -0.11, z: -0.07 },
-    { color: "#8b5cf6", size: [0.18, 0.09, 0.16], x: 0.09, z: 0.06 },
-    { color: "#22c55e", size: [0.11, 0.21, 0.11], x: -0.02, z: 0.11 },
-  ],
-  [
-    { color: "#0ea5e9", size: [0.16, 0.08, 0.16], x: -0.13, z: 0.03 },
-    { color: "#f97316", size: [0.12, 0.18, 0.12], x: 0.11, z: -0.06 },
-    { color: "#eab308", size: [0.2, 0.05, 0.12], x: 0.02, z: 0.09 },
-  ],
+/** Combos por ciclo: formas distintas, no colores. */
+const LAYOUTS: PackedKind[][] = [
+  ["carton", "mailer", "tube"],
+  ["tube", "carton", "mailer"],
+  ["mailer", "tube", "carton"],
+  ["carton", "tube", "mailer"],
 ];
 
 const BOX_W = 0.8;
@@ -106,7 +104,7 @@ function HollowShell() {
   const w = BOX_W;
   const d = BOX_D;
   const t = WALL;
-  const lip = h * 0.18;
+  const lip = h * 0.14;
 
   return (
     <group>
@@ -146,76 +144,141 @@ function HollowShell() {
         <meshStandardMaterial color={inner} roughness={0.96} />
       </mesh>
 
-      {/* Solo labio frontal — el interior se lee de frente */}
+      {/* Labio frontal bajo — interior legible */}
       <mesh position={[0, -h / 2 + lip / 2, d / 2 - t / 2]} castShadow receiveShadow>
         <boxGeometry args={[w, lip, t]} />
         <Cardboard color={outer} />
       </mesh>
 
-      {/* Luz interior suave para que se note el hueco */}
-      <pointLight position={[0, 0.05, 0.05]} intensity={0.45} color="#ffd7a8" distance={0.7} decay={2} />
+      <pointLight position={[0, 0.06, 0.06]} intensity={0.55} color="#ffe0b8" distance={0.75} decay={2} />
     </group>
   );
 }
 
+/** Cartón kraft sellado con cinta + etiqueta. */
+function CartonSeal() {
+  return (
+    <group>
+      <RoundedBox args={[0.145, PACK_H.carton, 0.13]} radius={0.012} castShadow>
+        <meshStandardMaterial color="#c4a574" roughness={0.88} metalness={0.02} />
+      </RoundedBox>
+      <mesh position={[0, 0.02, 0.066]}>
+        <planeGeometry args={[0.145, 0.028]} />
+        <meshStandardMaterial color="#d4b896" roughness={0.55} />
+      </mesh>
+      <mesh position={[0, PACK_H.carton / 2 + 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[0.13, 0.03]} />
+        <meshStandardMaterial color="#d4b896" roughness={0.55} />
+      </mesh>
+      <mesh position={[0.02, -0.01, 0.067]}>
+        <planeGeometry args={[0.055, 0.035]} />
+        <meshStandardMaterial color="#f8fafc" roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Sobre / mailer acolchado achatado. */
+function Mailer() {
+  return (
+    <group>
+      <RoundedBox args={[0.19, PACK_H.mailer, 0.14]} radius={0.01} castShadow>
+        <meshStandardMaterial color="#9a8b78" roughness={0.9} metalness={0.02} />
+      </RoundedBox>
+      <mesh position={[0, PACK_H.mailer / 2 + 0.002, -0.02]} rotation={[-0.15, 0, 0]}>
+        <planeGeometry args={[0.17, 0.06]} />
+        <meshStandardMaterial color="#8a7b6a" roughness={0.85} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0.04, 0.005, 0.072]}>
+        <planeGeometry args={[0.05, 0.028]} />
+        <meshStandardMaterial color="#e8e4dc" roughness={0.45} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Rollo / botella envuelta en kraft. */
+function WrapTube() {
+  return (
+    <group>
+      <mesh castShadow>
+        <cylinderGeometry args={[0.048, 0.052, PACK_H.tube, 16]} />
+        <meshStandardMaterial color="#b8956a" roughness={0.86} metalness={0.03} />
+      </mesh>
+      <mesh position={[0, 0.01, 0]}>
+        <cylinderGeometry args={[0.053, 0.053, 0.035, 16]} />
+        <meshStandardMaterial color="#d4b896" roughness={0.6} />
+      </mesh>
+      <mesh position={[0.053, 0.04, 0]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[0.04, 0.05]} />
+        <meshStandardMaterial color="#f1f5f9" roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+function PackedPrefab({ kind }: { kind: PackedKind }) {
+  if (kind === "carton") return <CartonSeal />;
+  if (kind === "mailer") return <Mailer />;
+  return <WrapTube />;
+}
+
 /**
- * Colocación: aparece arriba del slot → flota → cae con squash al aterrizar.
+ * Colocación: hover → drop → squash en grupo interno (prefab a tamaño fijo).
  */
 function ContentItems({ shared }: { shared: MutableRefObject<AnimShared> }) {
-  const refs = useRef<(Group | null)[]>([null, null, null]);
-  const mats = useRef<(MeshStandardMaterial | null)[]>([null, null, null]);
+  const roots = useRef<(Group | null)[]>([null, null, null]);
+  const squash = useRef<(Group | null)[]>([null, null, null]);
   const lastCycle = useRef(-1);
-  const items = useRef(PALETTES[0]);
+  const layout = useRef(LAYOUTS[0]);
 
   useFrame(() => {
     const { fill: fillU, phase, cycle } = shared.current;
     if (cycle !== lastCycle.current) {
       lastCycle.current = cycle;
-      items.current = PALETTES[cycle % PALETTES.length];
-      for (let i = 0; i < 3; i++) {
-        const m = mats.current[i];
-        if (m) m.color.set(items.current[i].color);
-      }
+      layout.current = LAYOUTS[cycle % LAYOUTS.length];
     }
 
-    const list = items.current;
+    const kinds = layout.current;
     for (let i = 0; i < 3; i++) {
-      const g = refs.current[i];
-      if (!g) continue;
-      const it = list[i];
+      const g = roots.current[i];
+      const sq = squash.current[i];
+      if (!g || !sq) continue;
+
+      const kind = kinds[i];
+      const slot = SLOT_POS[i];
       const stagger = i * 0.26;
       const local = THREE.MathUtils.clamp((fillU - stagger) / 0.48, 0, 1);
 
-      // 0–0.28 hover · 0.28–1 drop
       let y: number;
       let sx = 1;
       let sy = 1;
       let sz = 1;
       let rotY = 0;
       const hoverY = BOX_H / 2 + 0.28;
-      const endY = INNER_Y0 + it.size[1] / 2 + 0.003;
+      const endY = INNER_Y0 + PACK_H[kind] / 2 + 0.003;
 
       if (local < 0.28) {
         const h = local / 0.28;
-        y = THREE.MathUtils.lerp(hoverY + 0.18, hoverY, ease(h));
-        rotY = (1 - h) * 0.8 * (i % 2 === 0 ? 1 : -1);
+        y = THREE.MathUtils.lerp(hoverY + 0.16, hoverY, ease(h));
+        rotY = (1 - h) * 0.55 * (i % 2 === 0 ? 1 : -1);
       } else {
         const d = (local - 0.28) / 0.72;
         const drop = easeOutCubic(d);
-        const bounce = d > 0.85 ? Math.sin(((d - 0.85) / 0.15) * Math.PI) * 0.035 * (1 - d) : 0;
+        const bounce = d > 0.85 ? Math.sin(((d - 0.85) / 0.15) * Math.PI) * 0.028 * (1 - d) : 0;
         y = THREE.MathUtils.lerp(hoverY, endY, drop) + bounce;
-        rotY = (1 - drop) * 0.35 * (i % 2 === 0 ? 1 : -1);
-        // Squash al impacto
+        // Asienta plano (yaw → 0)
+        rotY = (1 - drop) * 0.25 * (i % 2 === 0 ? 1 : -1);
         if (d > 0.82 && d < 0.95) {
-          const s = (d - 0.82) / 0.13;
-          sy = THREE.MathUtils.lerp(1, 0.72, Math.sin(s * Math.PI));
-          sx = sz = THREE.MathUtils.lerp(1, 1.18, Math.sin(s * Math.PI));
+          const s = Math.sin(((d - 0.82) / 0.13) * Math.PI);
+          sy = THREE.MathUtils.lerp(1, 0.78, s);
+          sx = sz = THREE.MathUtils.lerp(1, 1.12, s);
         }
       }
 
-      g.position.set(it.x, y, it.z);
-      g.rotation.set(0, rotY, (1 - local) * 0.12);
-      g.scale.set(it.size[0] * sx, it.size[1] * sy, it.size[2] * sz);
+      g.position.set(slot.x, y, slot.z);
+      g.rotation.set(0, rotY, (1 - local) * 0.08);
+      sq.scale.set(sx, sy, sz);
 
       const show =
         (phase === "fill" && local > 0.02) ||
@@ -223,6 +286,9 @@ function ContentItems({ shared }: { shared: MutableRefObject<AnimShared> }) {
         phase === "seal" ||
         phase === "ship";
       g.visible = show;
+      for (const child of sq.children) {
+        child.visible = child.name === kind;
+      }
     }
   });
 
@@ -232,20 +298,25 @@ function ContentItems({ shared }: { shared: MutableRefObject<AnimShared> }) {
         <group
           key={i}
           ref={(el) => {
-            refs.current[i] = el;
+            roots.current[i] = el;
           }}
           visible={false}
         >
-          <RoundedBox args={[1, 1, 1]} radius={0.11} castShadow>
-            <meshStandardMaterial
-              ref={(el) => {
-                mats.current[i] = el;
-              }}
-              color={PALETTES[0][i].color}
-              roughness={0.48}
-              metalness={0.12}
-            />
-          </RoundedBox>
+          <group
+            ref={(el) => {
+              squash.current[i] = el;
+            }}
+          >
+            <group name="carton">
+              <PackedPrefab kind="carton" />
+            </group>
+            <group name="mailer" visible={false}>
+              <PackedPrefab kind="mailer" />
+            </group>
+            <group name="tube" visible={false}>
+              <PackedPrefab kind="tube" />
+            </group>
+          </group>
         </group>
       ))}
     </group>

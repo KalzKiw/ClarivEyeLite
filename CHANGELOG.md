@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.13 — 2026-10-09
+
+### Login — bultos embalados en el fill
+- Sustituye cubos de colores por cartón sellado, mailer y tubo kraft (layouts por ciclo).
+- Prefabs a tamaño fijo + squash interno; labio/luz interior para leer el hueco.
+
 ## 0.3.12 — 2026-10-09
 
 ### Login — pack hueco, giro y cámara por fase
