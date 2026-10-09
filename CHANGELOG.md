@@ -5,6 +5,7 @@
 ### Free limit — modal Pro + banner
 - `UpgradeModal` al tocar el límite (ClarivScan / Pedidos).
 - `FreeLimitBanner` con CTA “Suscribirse a Pro”.
+- Modal comparación Free|Pro, toggle mensual/anual, acento morado + caja Clariv.
 
 ## 0.3.24 — 2026-10-09
 
