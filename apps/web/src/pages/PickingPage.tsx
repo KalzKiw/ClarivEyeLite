@@ -165,7 +165,6 @@ export function PickingPage() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Picking</h1>
-          <p className="text-sm text-muted-foreground">Scan CEL1 o referencia de línea</p>
         </div>
         <Button type="button" className="gap-1.5 shrink-0" onClick={() => setScanning(true)}>
           <ScanLine size={16} />

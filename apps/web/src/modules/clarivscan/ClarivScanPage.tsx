@@ -307,13 +307,7 @@ export function ClarivScanPage() {
       <div className="flex items-center gap-3">
         <ClarivBox size={44} />
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Módulo integrado
-          </p>
           <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
-          <p className="text-sm text-muted-foreground">
-            PDF con texto o foto · OC / albarán / factura / OT
-          </p>
         </div>
       </div>
 

@@ -36,8 +36,7 @@ export function OrdersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Pedidos de salida</h1>
           <p className="text-sm text-muted-foreground">
-            Plan {plan} · {openCount}/{plan === "free" ? FREE_OPEN_LIMIT : "∞"} abiertos · toca un
-            pedido
+            {openCount}/{plan === "free" ? FREE_OPEN_LIMIT : "∞"} abiertos
           </p>
         </div>
         {freeBlocked ? (

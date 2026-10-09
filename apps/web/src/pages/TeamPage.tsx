@@ -86,12 +86,7 @@ export function TeamPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
-        <p className="text-sm text-muted-foreground">
-          {business?.name ?? "Negocio"} · quién puede hacer picking
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
 
       <Card className="space-y-2">
         <p className="text-sm font-medium">Usuarios ({users.length})</p>

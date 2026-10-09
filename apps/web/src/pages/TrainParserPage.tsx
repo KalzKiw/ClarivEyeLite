@@ -119,12 +119,7 @@ export function TrainParserPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Entrenar lector</h1>
-        <p className="text-sm text-muted-foreground">
-          Por negocio: enseña dónde están SKU, nombre y cantidad en <em>tu</em> albarán.
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Entrenar lector</h1>
 
       {saved.length > 0 ? (
         <Card className="space-y-2">

@@ -39,10 +39,7 @@ export function LogPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Log</h1>
-        <p className="text-sm text-muted-foreground">Historial local del dispositivo</p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Historial</h1>
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sin eventos todavía.</p>
       ) : (
