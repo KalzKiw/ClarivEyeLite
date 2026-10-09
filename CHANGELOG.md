@@ -6,6 +6,7 @@
 - `documentDate` + UI fecha; líneas con ref, nombre, qty, bultos, precio.
 - `ocr-normalize`: códigos OCR (SKUO→SKU0) y precios sin coma; extractor por forma de fila.
 - Fashion dirty recupera Bufanda `SKU000009` sin hardcode del nombre.
+- CP español (01–52) sin nombre de producto no entra como SKU (p.ej. `41001` pelado).
 
 ## 0.3.23 — 2026-10-09
 

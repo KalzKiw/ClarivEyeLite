@@ -37,6 +37,19 @@ describe("es-postal", () => {
     ).toBe(true);
   });
 
+  it("desprecia CP español sin nombre (41001 pelado)", () => {
+    expect(
+      isProductLine({
+        reference: "41001",
+        name: null,
+        quantity: 1,
+        packages: 0,
+        unitPrice: null,
+        confidence: 0.5,
+      }),
+    ).toBe(false);
+  });
+
   it("desprecia CP + localidad de la misma provincia", () => {
     expect(
       isProductLine({

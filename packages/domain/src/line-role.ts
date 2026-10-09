@@ -185,12 +185,16 @@ export function productScore(line: DocumentLine): number {
   const refClass = classifyText(ref);
   const nameClass = name ? classifyText(name) : null;
 
-  // CP español (prefijo provincia 01–52) + localidad / CCAA / “España”
+  // CP español (prefijo 01–52) sin nombre de producto → dirección, no SKU
+  if (isSpanishPostalCode(ref) && name.length < 2) {
+    return 0.1;
+  }
+  // CP español + localidad / CCAA / “España”
   if (
     isSpanishPostalCode(ref) &&
     (looksLikePlaceName(name) ||
       nameClass?.role === "address" ||
-      (name && postalMatchesPlaceName(ref, name)))
+      postalMatchesPlaceName(ref, name))
   ) {
     return 0.1;
   }
@@ -231,7 +235,24 @@ export function isProductLine(line: DocumentLine): boolean {
 }
 
 export function filterProductLines(lines: DocumentLine[]): DocumentLine[] {
-  return lines.filter(isProductLine);
+  const hasPrefixedSku = lines.some(
+    (l) =>
+      /^(Item\d+|SKU\d+)/i.test(l.reference) ||
+      (/^[A-ZÁÉÍÓÚÑ]{2,5}-\d{3,6}$/i.test(l.reference) &&
+        !/^(ALB|PED|OC|OT|FAC)/i.test(l.reference.split("-")[0] ?? "")),
+  );
+  return lines.filter((l) => {
+    if (!isProductLine(l)) return false;
+    // En docs con ART-/SKU-/Item, un CP español pelado es basura de dirección
+    if (
+      hasPrefixedSku &&
+      isSpanishPostalCode(l.reference) &&
+      !(l.name && l.name.trim().length >= 2)
+    ) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /** Texto que no debería ser ref ni nombre de producto (roles negativos). */
