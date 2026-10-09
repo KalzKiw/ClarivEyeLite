@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.6 — 2026-10-09
+
+### Login — diorama 3D legible
+- Escena R3F reescrita: pallet de madera, cartones con cinta, racks metálicos, hand scanner y volumen de scan emissive.
+- Iluminación de estudio + cámara cercana + `OrbitControls` auto-rotate (sin zoom/pan).
+- Overlay solo en el 30% inferior; fallback Suspense con pulso y “Cargando escena…”.
+
 ## 0.3.5 — 2026-10-09
 
 ### Login — escena 3D + alta simplificada

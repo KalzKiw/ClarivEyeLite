@@ -22,18 +22,24 @@ function Fallback({ compact }: { compact?: boolean }) {
   return (
     <div
       className={cn(
-        "bg-[#10253f]",
+        "flex items-center justify-center bg-[#0b1a2e]",
         compact ? "h-full w-full" : "absolute inset-0",
-        "bg-[radial-gradient(ellipse_at_30%_40%,#1e4a8c_0%,#10253f_55%)]",
       )}
-    />
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3 px-4">
+        <div className="h-10 w-10 animate-pulse rounded-lg bg-[#1e3a5f] ring-1 ring-[#3b82f6]/40" />
+        <p className="text-sm font-medium text-white/70">Cargando escena…</p>
+      </div>
+    </div>
   );
 }
 
 /** Panel visual: escena 3D (R3F) con fallback sólido si WebGL falla. */
 export function OutboundArt({ className, compact = false }: Props) {
   return (
-    <div className={cn("relative overflow-hidden", className)}>
+    <div className={cn("relative h-full w-full overflow-hidden", className)}>
       <SceneErrorBoundary fallback={<Fallback compact={compact} />}>
         <Suspense fallback={<Fallback compact={compact} />}>
           <OutboundScene compact={compact} />

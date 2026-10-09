@@ -111,11 +111,19 @@ export function LoginPage() {
         {/* Panel marca + 3D */}
         <aside className="relative hidden min-h-dvh flex-col lg:flex">
           <Suspense
-            fallback={<div className="absolute inset-0 bg-[#10253f]" />}
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center bg-[#0b1a2e]">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-10 w-10 animate-pulse rounded-lg bg-[#1e3a5f] ring-1 ring-[#3b82f6]/40" />
+                  <p className="text-sm font-medium text-white/70">Cargando escena…</p>
+                </div>
+              </div>
+            }
           >
-            <OutboundArt className="absolute inset-0" />
+            <OutboundArt className="absolute inset-0 h-full w-full" />
           </Suspense>
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0a1628]/90 via-transparent to-[#0a1628]/55" />
+          {/* Solo abajo (~30%): legibilidad del tagline; arriba transparente */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t from-[#0a1628]/95 via-[#0a1628]/40 to-transparent" />
 
           {/* Título SIEMPRE arriba */}
           <div className="relative z-10 p-8 xl:p-10">{brandBar}</div>
@@ -135,10 +143,16 @@ export function LoginPage() {
               <span className="font-display text-lg font-semibold text-white">ClarivEye Lite</span>
             </div>
             <div className="relative h-36">
-              <Suspense fallback={<div className="h-full w-full bg-[#10253f]" />}>
+              <Suspense
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-[#0b1a2e]">
+                    <p className="text-xs font-medium text-white/60">Cargando escena…</p>
+                  </div>
+                }
+              >
                 <OutboundArt compact className="h-full w-full" />
               </Suspense>
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[hsl(var(--login-surface))] to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[hsl(var(--login-surface))] to-transparent" />
             </div>
           </div>
 
