@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  cleanLines,
   extractAssistedCandidates,
+  isJunkContent,
+  isJunkReference,
   namedLineRatio,
   passesQualityGate,
   scoreParseResult,
@@ -76,5 +79,52 @@ describe("quality-gate", () => {
     ]);
     expect(namedLineRatio(d)).toBeGreaterThanOrEqual(0.5);
     expect(passesQualityGate(d)).toBe(true);
+  });
+
+  it("limpia teléfono/CP/observaciones pegadas del OCR", () => {
+    expect(isJunkReference("TLFCONTACTO34600000000")).toBe(true);
+    expect(isJunkContent("41001 Sevilla, España")).toBe(true);
+    expect(
+      isJunkContent(
+        "ENTREGARPORELMUELLEDECARGATRASEROHORARIODERECEPCINDE0900A1400HLAMERCANCADEBE",
+      ),
+    ).toBe(true);
+    expect(isJunkReference("ART-0012")).toBe(false);
+
+    const cleaned = cleanLines([
+      {
+        reference: "ART-0012",
+        name: "Monitores LED",
+        quantity: 10,
+        packages: 10,
+        unitPrice: null,
+        confidence: 0.9,
+      },
+      {
+        reference: "TLFCONTACTO34600000000",
+        name: null,
+        quantity: 1,
+        packages: 0,
+        unitPrice: null,
+        confidence: 0.4,
+      },
+      {
+        reference: "41001 Sevilla, España",
+        name: null,
+        quantity: 1,
+        packages: 0,
+        unitPrice: null,
+        confidence: 0.4,
+      },
+      {
+        reference: "ENTREGARPORELMUELLEDECARGATRASEROHORARIODERECEPCINDE0900A1400HLAMERCANCADEBE",
+        name: null,
+        quantity: 1,
+        packages: 0,
+        unitPrice: null,
+        confidence: 0.3,
+      },
+    ]);
+    expect(cleaned.map((l) => l.reference)).toEqual(["ART-0012"]);
   });
 });

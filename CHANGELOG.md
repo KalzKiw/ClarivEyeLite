@@ -6,6 +6,7 @@
 - Reglas: SKU `XX-NNNN` (sin ALB/PED), zip descripciones + `N M uds` (bultos/total).
 - Blacklist cabecera (tel, NIF, transporte). Fixture OCR real ALB-2026-0842.
 - `column-merge`: no recortar `ART-0012`→`0012`; no inventar `PROD-N` con direcciones; compite con `parseAnyDocument`.
+- Filtro basura OCR pegada: `TLFCONTACTO…`, CP+ciudad, observaciones `ENTREGAR…MUELLE…`.
 
 ## 0.3.21 — 2026-10-09
 

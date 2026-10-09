@@ -1,4 +1,10 @@
-import { auditLine, canCreateOrder, type AssistedCandidate, type LineWarning } from "@clariveye-lite/domain";
+import {
+  auditLine,
+  canCreateOrder,
+  isJunkLine,
+  type AssistedCandidate,
+  type LineWarning,
+} from "@clariveye-lite/domain";
 import { Camera, CheckCircle2, FileUp, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -120,7 +126,7 @@ export function ClarivScanPage() {
       setCandidates(parsed.candidates ?? []);
 
       if (parsed.lines.length > 0) {
-        const drafted = parsed.lines.map(draftFromParsed);
+        const drafted = parsed.lines.filter((l) => !isJunkLine(l)).map(draftFromParsed);
         setLines(drafted);
         const bad = drafted.filter((l) => l.suspicious).length;
         if (bad > 0) {

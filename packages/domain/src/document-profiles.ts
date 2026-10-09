@@ -9,6 +9,7 @@ import {
   type DocumentParseResult,
   type DocumentType,
 } from "./document-parser";
+import { isJunkContent, isJunkReference } from "./quality-gate";
 
 export type DocumentProfile =
   | "easywms"
@@ -590,10 +591,11 @@ function extractAlbCodigo(text: string): DocumentLine[] {
   for (const raw of descSrc.split(/\n/)) {
     const t = raw.replace(/\s+/g, " ").trim();
     if (t.length < 4) continue;
-    if (ALB_DESC_STOP.test(t)) break;
+    if (ALB_DESC_STOP.test(t) || isJunkContent(t)) break;
     if (isPrefixedArticleCode(t)) continue;
     if (/^\d+([.,]\d+)?\s*(kg|uds?|palets?)?$/i.test(t)) continue;
     if (/^[+\d\s\-()]{6,}$/.test(t)) continue;
+    if (isJunkContent(t)) continue;
     names.push(t);
   }
 
@@ -619,13 +621,15 @@ function extractAlbCodigo(text: string): DocumentLine[] {
   // 4) Zip por índice (orden de columna OCR)
   const n = codes.length;
   for (let i = 0; i < n; i++) {
+    if (isJunkReference(codes[i])) continue;
+    const name = names[i] && !isJunkContent(names[i]) ? names[i] : null;
     const q = qtys[i];
     const row = line(
       codes[i],
-      names[i] ?? null,
+      name,
       q?.quantity ?? 1,
       null,
-      names[i] && q ? 0.93 : names[i] ? 0.88 : 0.78,
+      name && q ? 0.93 : name ? 0.88 : 0.78,
     );
     row.packages = q?.packages ?? 0;
     out.push(row);
