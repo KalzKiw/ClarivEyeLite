@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.17 — 2026-10-09
+
+### PackSpinner — loop más fluido
+- Timeline solapada (~5 s): fill/pack/spin sin cortes; yaw y wrap con damp continuo.
+- Papel con crossfade hoja→cáscara; squash de salida más suave.
+
 ## 0.3.16 — 2026-10-09
 
 ### PackSpinner — papel al girar + relleno alto
