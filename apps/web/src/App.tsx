@@ -4,6 +4,7 @@ import { ClarivScanPage } from "@/modules/clarivscan/ClarivScanPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { LogPage } from "@/pages/LogPage";
 import { OrdersPage } from "@/pages/OrdersPage";
+import { PickingOrderPage } from "@/pages/PickingOrderPage";
 import { PickingPage } from "@/pages/PickingPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { BusinessPage } from "@/pages/settings/BusinessPage";
@@ -21,6 +22,7 @@ export default function App() {
         <Route index element={<OrdersPage />} />
         <Route path="clarivscan" element={<ClarivScanPage />} />
         <Route path="picking" element={<PickingPage />} />
+        <Route path="picking/:id" element={<PickingOrderPage />} />
         <Route path="log" element={<LogPage />} />
         <Route path="equipo" element={<TeamPage />} />
         <Route path="ajustes" element={<SettingsPage />} />
