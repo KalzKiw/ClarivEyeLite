@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { SettingsBack } from "@/components/SettingsNavRow";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
@@ -86,10 +87,14 @@ export function TeamPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
+      <SettingsBack />
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Quién puede hacer picking</p>
+      </div>
 
       <Card className="space-y-2">
-        <p className="text-sm font-medium">Usuarios ({users.length})</p>
+        <p className="text-sm font-semibold">Usuarios ({users.length})</p>
         <ul className="space-y-2 text-sm">
           {users.map((u) => (
             <li

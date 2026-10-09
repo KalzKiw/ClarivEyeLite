@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { RegionPainter } from "@/components/RegionPainter";
+import { SettingsBack } from "@/components/SettingsNavRow";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { currentBusinessId } from "@/lib/auth";
@@ -119,6 +120,7 @@ export function TrainParserPage() {
 
   return (
     <div className="space-y-4">
+      <SettingsBack />
       <h1 className="text-2xl font-semibold tracking-tight">Entrenar lector</h1>
 
       {saved.length > 0 ? (

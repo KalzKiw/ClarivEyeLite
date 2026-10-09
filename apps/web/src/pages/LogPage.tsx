@@ -1,6 +1,7 @@
 import type { Order } from "@clariveye-lite/domain";
 import { ORDER_STATUS_LABEL } from "@clariveye-lite/domain";
 import { useEffect, useState } from "react";
+import { SettingsBack } from "@/components/SettingsNavRow";
 import { Card } from "@/components/ui";
 import { loadOrders } from "@/lib/store";
 
@@ -39,6 +40,7 @@ export function LogPage() {
 
   return (
     <div className="space-y-4">
+      <SettingsBack />
       <h1 className="text-2xl font-semibold tracking-tight">Historial</h1>
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sin eventos todavía.</p>

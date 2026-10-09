@@ -24,12 +24,13 @@ export default function App() {
         <Route path="picking" element={<PickingPage />} />
         <Route path="picking/:id" element={<PickingOrderPage />} />
         <Route path="log" element={<LogPage />} />
-        <Route path="equipo" element={<TeamPage />} />
+        <Route path="equipo" element={<Navigate to="/ajustes/equipo" replace />} />
         <Route path="ajustes" element={<SettingsPage />} />
         <Route path="ajustes/perfil" element={<ProfilePage />} />
         <Route path="ajustes/negocio" element={<BusinessPage />} />
         <Route path="ajustes/plan" element={<PlanPage />} />
         <Route path="ajustes/lecturas" element={<ScanStatsPage />} />
+        <Route path="ajustes/equipo" element={<TeamPage />} />
         <Route path="entrenar" element={<TrainParserPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

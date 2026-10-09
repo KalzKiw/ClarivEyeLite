@@ -6,11 +6,10 @@ import {
   type AssistedCandidate,
   type LineWarning,
 } from "@clariveye-lite/domain";
-import { Camera, CheckCircle2, FileUp, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ClarivBox } from "@/components/ClarivBox";
-import { FreeLimitBanner } from "@/components/FreeLimitBanner";
+import { ImportDocSheet } from "@/components/ImportDocSheet";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { getActiveDocProfile } from "@/lib/doc-profiles-store";
@@ -99,14 +98,11 @@ export function ClarivScanPage() {
   const [candidates, setCandidates] = useState<AssistedCandidate[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [openCount, setOpenCount] = useState(() => countOpenOrders(loadOrders()));
-  const [freeBlocked, setFreeBlocked] = useState(() => !canCreateOrder(loadOrders(), loadPlan()));
 
   useEffect(() => {
-    const orders = loadOrders();
-    const plan = loadPlan();
-    setOpenCount(countOpenOrders(orders));
-    setFreeBlocked(!canCreateOrder(orders, plan));
+    setOpenCount(countOpenOrders(loadOrders()));
   }, []);
 
   const includedCount = useMemo(() => lines.filter((l) => l.included).length, [lines]);
@@ -271,7 +267,6 @@ export function ClarivScanPage() {
     const orders = loadOrders();
     const plan = loadPlan();
     if (!canCreateOrder(orders, plan)) {
-      setFreeBlocked(true);
       setOpenCount(countOpenOrders(orders));
       setUpgradeOpen(true);
       return;
@@ -304,50 +299,26 @@ export function ClarivScanPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <ClarivBox size={44} />
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
-        </div>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
 
-      {freeBlocked ? (
-        <FreeLimitBanner openCount={openCount} onOpenUpgrade={() => setUpgradeOpen(true)} />
-      ) : null}
+      <Button
+        type="button"
+        className="w-full gap-2 py-3.5"
+        disabled={busy}
+        onClick={() => setImportOpen(true)}
+      >
+        <Plus size={18} />
+        {busy ? status || "Leyendo…" : "Añadir documento"}
+      </Button>
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-7 text-center shadow-sm transition active:scale-[0.99]">
-          <FileUp className="text-primary" size={28} />
-          <span className="text-sm font-medium">
-            {busy ? status || "Leyendo…" : "Subir PDF"}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Cascada layout → OCR · nunca te deja tirado
-          </span>
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-7 text-center shadow-sm transition active:scale-[0.99]">
-          <Camera className="text-primary" size={28} />
-          <span className="text-sm font-medium">
-            {busy ? status || "Leyendo…" : "Foto o imagen"}
-          </span>
-          <span className="text-xs text-muted-foreground">OCR por columnas</span>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => onFile(event.target.files?.[0] ?? null)}
-          />
-        </label>
-      </div>
+      <ImportDocSheet
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        busy={busy}
+        onPdf={(f) => void onFile(f)}
+        onImage={(f) => void onFile(f)}
+        onManual={addManual}
+      />
 
       {trainedProfile ? (
         <p className="text-xs text-muted-foreground">

@@ -29,22 +29,25 @@ export function BusinessPage() {
   return (
     <div className="space-y-4">
       <SettingsBack />
-      <h1 className="text-2xl font-semibold tracking-tight">Negocio</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Negocio</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Nombre que ves en el header</p>
+      </div>
 
       <Card className="space-y-3">
         {isOwner ? (
           <form onSubmit={onRename} className="space-y-3">
-            <Field label="Nombre">
+            <Field label="Nombre del negocio">
               <TextInput value={bizName} onChange={(e) => setBizName(e.target.value)} required />
             </Field>
             <ErrorNote message={bizErr} />
-            {bizMsg ? <p className="text-xs text-primary">{bizMsg}</p> : null}
+            {bizMsg ? <p className="text-xs font-medium text-primary">{bizMsg}</p> : null}
             <Button type="submit" className="w-full">
-              Guardar nombre
+              Guardar
             </Button>
           </form>
         ) : (
-          <p className="text-sm font-medium">{business?.name}</p>
+          <p className="text-base font-semibold">{business?.name}</p>
         )}
       </Card>
     </div>

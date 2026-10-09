@@ -1,9 +1,9 @@
-import { ClipboardList, PackageCheck, ScanLine, Settings, Users } from "lucide-react";
+import { ClipboardList, PackageCheck, ScanLine, Settings } from "lucide-react";
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
-import { Watermark } from "@/components/Watermark";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
+import { loadPlan } from "@/lib/store";
 
 const HEADER_H = "h-14";
 
@@ -11,11 +11,12 @@ const tabs = [
   { to: "/", label: "Pedidos", icon: ClipboardList, end: true },
   { to: "/clarivscan", label: "ClarivScan", icon: ScanLine },
   { to: "/picking", label: "Picking", icon: PackageCheck },
-  { to: "/equipo", label: "Equipo", icon: Users },
+  { to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
 
 export function Shell() {
   const { user, business } = useAuth();
+  const plan = loadPlan();
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -26,24 +27,17 @@ export function Shell() {
           <div className="flex min-w-0 items-center gap-2.5">
             <ClarivBox size={28} className="shrink-0 brightness-125" />
             <div className="min-w-0">
-              <p className="truncate text-lg font-semibold leading-none">ClarivEye Lite</p>
-              <p className="mt-0.5 truncate text-[11px] text-primary-foreground/80">
-                {business?.name ?? "Negocio"} · {user.name}
+              <p className="truncate text-lg font-semibold leading-none">
+                {business?.name ?? "Negocio"}
               </p>
+              <p className="mt-0.5 truncate text-[11px] text-primary-foreground/80">{user.name}</p>
             </div>
           </div>
           <NavLink
-            to="/ajustes"
-            className={({ isActive }) =>
-              cn(
-                "rounded-md p-2 transition hover:bg-primary-foreground/10",
-                isActive && "bg-primary-foreground/15",
-              )
-            }
-            aria-label="Ajustes"
-            title="Ajustes"
+            to="/ajustes/plan"
+            className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-primary-foreground transition hover:bg-primary-foreground/25"
           >
-            <Settings className="h-5 w-5" />
+            {plan === "pro" ? "Pro" : "Free"}
           </NavLink>
         </div>
       </header>
@@ -51,8 +45,6 @@ export function Shell() {
       <main className="mx-auto w-full max-w-lg flex-1 space-y-4 px-4 py-4">
         <Outlet />
       </main>
-
-      <Watermark />
 
       <nav className="bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur transition duration-300">
         <ul className="mx-auto grid max-w-lg grid-cols-4">
