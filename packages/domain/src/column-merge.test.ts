@@ -7,6 +7,7 @@ import {
   extractSkuLines,
   parseColumnBundle,
 } from "./column-merge";
+import { FIXTURE_ALB_CODIGO_OCR } from "./fixtures/albaranes";
 import { FIXTURE_OC_COLUMNS_SKEW } from "./fixtures/oc-columns-skew";
 
 describe("column OCR merge (OC real)", () => {
@@ -21,6 +22,34 @@ describe("column OCR merge (OC real)", () => {
       "14455",
       "66888",
     ]);
+  });
+
+  it("conserva prefijo ART-0012 (no solo 0012)", () => {
+    expect(extractSkuLines("Código\nART-0012\nART-0054\nCBL-1020\nSOP-9921\n")).toEqual([
+      "ART-0012",
+      "ART-0054",
+      "CBL-1020",
+      "SOP-9921",
+    ]);
+  });
+
+  it("no inventa PROD con direcciones; usa alb_codigo del fullText", () => {
+    const doc = parseColumnBundle({
+      headerText: "ALBARÁN DE ENTREGA\nALB-2026-0842\n",
+      skuText: "Lugar de Entrega\n",
+      descText: "Lugar de Entrega (Destinatario)\nComercializadora del Sur, S.A.\nC/ Gran Vía, 12, Planta Baja\n",
+      numsText: "",
+      fullText: FIXTURE_ALB_CODIGO_OCR,
+    });
+    expect(doc.lines.map((l) => l.reference)).toEqual([
+      "ART-0012",
+      "ART-0054",
+      "CBL-1020",
+      "SOP-9921",
+    ]);
+    expect(doc.lines[0].name).toMatch(/Monitores/i);
+    expect(doc.lines[0].quantity).toBe(10);
+    expect(doc.lines.every((l) => !/^PROD-/i.test(l.reference))).toBe(true);
   });
 
   it("saca nombres Producto X/T/H", () => {

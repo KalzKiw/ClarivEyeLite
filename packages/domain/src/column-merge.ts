@@ -1,5 +1,6 @@
 import { type DocumentLine, type DocumentParseResult, type DocumentType } from "./document-parser";
 import { parseAnyDocument } from "./document-profiles";
+import { scoreParseResult } from "./quality-gate";
 
 /** Una fila de tabla (co-ocurrencia SKU + desc + nums). */
 export type ColumnTableRow = {
@@ -27,12 +28,24 @@ function linesOf(text: string): string[] {
 }
 
 function isHeaderish(line: string): boolean {
-  return /art[ií]culo|descripci|cantidad|total|p\/?u|c[oó]digo|ref\.?|sku|ulo\b|cantid/i.test(line);
+  return /art[ií]culo|descripci|cantidad|total|p\/?u|c[oó]digo|ref\.?|sku|ulo\b|cantid|uds?\s*\/\s*cajas/i.test(
+    line,
+  );
+}
+
+/** Prefijos de documento — no son SKU de línea */
+const DOC_SKU_BLOCK = /^(ALB|PED|OC|OT|FAC|INV|NIF|CIF|IVA|OUT|DL|BATCH|PACK|REF)$/i;
+
+function isPrefixedSku(token: string): boolean {
+  const m = token.trim().match(/^([A-Za-zÁÉÍÓÚÑ]{2,5})-(\d{3,6})$/i);
+  if (!m) return false;
+  return !DOC_SKU_BLOCK.test(m[1]);
 }
 
 function isJunkSku(token: string): boolean {
   const t = token.toUpperCase();
   if (!t) return true;
+  if (isPrefixedSku(t)) return false;
   if (
     /ART|DESCRIP|CANTID|TOTAL|SUBTOTAL|IVA|EMPRESA|CLIENTE|VENDEDOR|FECHA|ORDEN|COMPRA|LL\b/.test(t) &&
     !/\d{4,}/.test(t)
@@ -43,12 +56,33 @@ function isJunkSku(token: string): boolean {
   return false;
 }
 
-/** Refs: 78958 / MESA-01 / 77 (Tosma) — ignora cabeceras OCR rotas */
+/** Cabecera / dirección / transporte colados como “nombre de producto” */
+export function isJunkDesc(line: string): boolean {
+  const t = (line || "").trim();
+  if (!t) return true;
+  if (isHeaderish(t)) return true;
+  return /lugar\s+de\s+entrega|destinatario|atenci[oó]n\s+a|tlf\.?\s*contacto|datos\s+de\s+transporte|transportista|matr[ií]cula|observaciones|logotipo|albar[aá]n\s+de\s+entrega|comercializadora|s\.?\s*l\.?\s*$|s\.?\s*a\.?\s*$|^c\/\s|^av\.?\s|planta\s+baja|p[aá]gina\s+\d|nif\s*:|agente\s*:|bultos\s+totales|peso\s+total|m[eé]todo\s*:|entregar\s+por|horario\s+de\s+recepci/i.test(
+    t,
+  );
+}
+
+/** Refs: ART-0012 / 78958 / MESA-01 / 77 — prioriza prefijo completo (no solo dígitos) */
 export function extractSkuLines(skuText: string): string[] {
   const out: string[] = [];
   for (const line of linesOf(skuText)) {
     if (isHeaderish(line)) continue;
     if (/albar[aá]n|n[ºo°.]?\s*alb|fecha|cliente|empresa/i.test(line)) continue;
+
+    // 1) Prefijo completo: ART-0012 (antes de sacar solo "0012")
+    const prefixed = [...line.matchAll(/\b([A-Za-zÁÉÍÓÚÑ]{2,5}-\d{3,6})\b/gi)].map((m) =>
+      m[1].toUpperCase(),
+    );
+    const goodPref = prefixed.filter(isPrefixedSku);
+    if (goodPref.length) {
+      for (const p of goodPref) out.push(p);
+      continue;
+    }
+
     const digits = line.match(/\b(\d{4,14})\b/g) || [];
     for (const d of digits) {
       if (!isJunkSku(d)) out.push(d);
@@ -70,7 +104,6 @@ export function extractSkuLines(skuText: string): string[] {
   }
   return [...new Set(out)];
 }
-
 function expandShortName(name: string): string {
   const t = name.trim();
   const m = t.match(/^P([A-Z0-9])$/i);
@@ -83,13 +116,13 @@ function expandShortName(name: string): string {
 export function extractDescLines(descText: string): string[] {
   const raw: string[] = [];
   for (const line of linesOf(descText)) {
-    if (isHeaderish(line)) continue;
+    if (isHeaderish(line) || isJunkDesc(line)) continue;
     if (/^[\d.,€\s|_\-]+$/.test(line)) continue;
     const cleaned = expandShortName(line.replace(/^[#|]+/, "").trim());
     if (cleaned.length < 2) continue;
     if (/^[Ee\s]+$/.test(cleaned)) continue;
     if (!/[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/.test(cleaned)) continue;
-    if (isHeaderish(cleaned)) continue;
+    if (isHeaderish(cleaned) || isJunkDesc(cleaned)) continue;
     raw.push(cleaned);
   }
   const products = raw.filter((l) => /producto\s*\w+|art[ií]culo\s+\w+/i.test(l));
@@ -113,12 +146,22 @@ export function namesNearRefs(skus: string[], fullText: string): Array<string | 
   });
 }
 
-export type QtyPrice = { quantity: number; unitPrice: string | null };
+export type QtyPrice = { quantity: number; unitPrice: string | null; packages?: number };
 
 export function extractQtyPriceLines(numsText: string): QtyPrice[] {
   const out: QtyPrice[] = [];
   for (const line of linesOf(numsText)) {
     if (isHeaderish(line) && !/\d/.test(line)) continue;
+    // "10 10 uds" → bultos + cantidad total
+    const udsPair = line.match(/\b(\d{1,4})\s+(\d{1,5})\s*uds?\b/i);
+    if (udsPair) {
+      out.push({
+        quantity: Math.max(1, Number(udsPair[2])),
+        unitPrice: null,
+        packages: Math.max(0, Number(udsPair[1])),
+      });
+      continue;
+    }
     const prices = [...line.matchAll(/(\d+[.,]\d{2})/g)].map((m) => m[1].replace(",", "."));
     const qtyPrice = line.match(/(?:^|[^\d])(\d{1,4})\s*[\]|lI]?\s+(\d+[.,]\d{2})/);
     if (qtyPrice) {
@@ -141,7 +184,6 @@ export function extractQtyPriceLines(numsText: string): QtyPrice[] {
   }
   return out;
 }
-
 /**
  * Alinea una lista secundaria a N slots (anclados a SKUs).
  * Si hay de más, recorta; si hay de menos, rellena undefined.
@@ -166,7 +208,7 @@ export function buildColumnRowsFromTexts(
 ): ColumnTableRow[] {
   const skuLines = linesOf(skuText).filter((l) => !isHeaderish(l) && !isJunkSku(l.replace(/\s/g, "")));
   const descLines = linesOf(descText).filter((l) => {
-    if (isHeaderish(l)) return false;
+    if (isHeaderish(l) || isJunkDesc(l)) return false;
     if (/^[\d.,€\s|_\-]+$/.test(l)) return false;
     return /[A-Za-zÁÉÍÓÚÑáéíóúñ]{2,}/.test(l);
   });
@@ -196,6 +238,7 @@ function detectType(text: string): DocumentType {
 
 function extractDocNumber(text: string): string | null {
   const m =
+    text.match(/\b(ALB-\d{4}-\d+)\b/i) ||
     text.match(/n[uú]mero\s+de\s+orden\s*[:#]?\s*(OC\s*[\d\-]+)/i) ||
     text.match(/\b(OC\s*\d{3,})\b/i) ||
     text.match(/(?:albar[aá]n|alb\.?)\s*(?:n[ºo°.]?)?\s*[:#]?\s*([A-Z0-9][\w\-\/]{2,})/i) ||
@@ -235,26 +278,37 @@ function lineFromRow(row: ColumnTableRow, index: number, fullText: string): Docu
   const skus = extractSkuLines(`${row.sku}\n${row.desc}`);
   const descs = extractDescLines(row.desc || row.sku);
   const nums = extractQtyPriceLines(row.nums || row.desc);
-  if (!skus.length && !descs.length) return null;
+  // Sin SKU real + solo basura de cabecera → no inventar PROD-N
+  if (!skus.length) {
+    if (!descs.length || descs.every(isJunkDesc)) return null;
+  }
 
   const reference = skus[0] || `PROD-${index + 1}`;
+  if (/^N?ALBAR|^FECHA|^CLIENTE|^ORDEN|^PROD-/i.test(reference) && !skus[0]) {
+    // PROD inventado solo si el nombre parece producto real
+    if (!descs[0] || isJunkDesc(descs[0])) return null;
+  }
   if (/^N?ALBAR|^FECHA|^CLIENTE|^ORDEN/i.test(reference)) return null;
 
   let name = descs[0] || null;
+  if (name && isJunkDesc(name)) name = null;
   if (!name && skus[0]) {
     name = namesNearRefs([skus[0]], fullText || cell)[0];
+    if (name && isJunkDesc(name)) name = null;
   }
-  // Nombre en misma celda que el código: "000113 Válvula…"
+  // Nombre en misma celda: "ART-0012 Monitores…" / "000113 Válvula…"
   if (!name && row.sku) {
-    const m = row.sku.match(/^\d{2,6}\s+([A-Za-zÁÉÍÓÚÑ].+)$/);
-    if (m?.[1] && !isHeaderish(m[1])) name = m[1].trim();
+    const m =
+      row.sku.match(/^[A-Za-z]{2,5}-\d{3,6}\s+([A-Za-zÁÉÍÓÚÑ].+)$/i) ||
+      row.sku.match(/^\d{2,6}\s+([A-Za-zÁÉÍÓÚÑ].+)$/);
+    if (m?.[1] && !isHeaderish(m[1]) && !isJunkDesc(m[1])) name = m[1].trim();
   }
   const qp = nums[0];
   return {
     reference,
     name,
     quantity: qp?.quantity ?? 1,
-    packages: 0,
+    packages: qp?.packages ?? 0,
     unitPrice: qp?.unitPrice ?? null,
     confidence: skus[0] && name ? 0.92 : skus[0] ? 0.8 : 0.55,
   };
@@ -271,7 +325,7 @@ function linesFromRows(rows: ColumnTableRow[], fullText: string): DocumentLine[]
 
 /**
  * Une OCR/layout por columnas en líneas de pedido.
- * Prioridad: rows afines > blobs alineados > parseAnyDocument.
+ * Prioridad: rows afines > blobs > parseAnyDocument (compite por score).
  */
 export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult {
   const joined = [bundle.headerText, bundle.skuText, bundle.descText, bundle.numsText, bundle.fullText]
@@ -290,24 +344,25 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
     const nearNames = namesNearRefs(skus, joined);
     const nums = extractQtyPriceLines(bundle.numsText);
 
-    const count = skus.length > 0 ? skus.length : descs.length;
+    // Sin SKUs: no fabricar PROD-N con direcciones de la columna desc
+    const count = skus.length > 0 ? skus.length : 0;
     const descSlots = alignToSlots(count, descs);
     const numSlots = alignToSlots(count, nums);
 
     for (let i = 0; i < count; i++) {
-      const reference = skus[i] || `PROD-${i + 1}`;
-      const name =
+      const reference = skus[i];
+      let name =
         (descs.length === skus.length ? descs[i] : undefined) ||
         descSlots[i] ||
         nearNames[i] ||
-        (skus.length === 0 ? descs[i] : null) ||
         null;
+      if (name && isJunkDesc(name)) name = null;
       const qp = nums.length === count ? nums[i] : numSlots[i];
       lines.push({
         reference,
         name,
         quantity: qp?.quantity ?? 1,
-        packages: 0,
+        packages: qp?.packages ?? 0,
         unitPrice: qp?.unitPrice ?? null,
         confidence: skus[i] && name ? 0.9 : skus[i] ? 0.75 : 0.5,
       });
@@ -315,15 +370,41 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
   }
 
   lines = enrichFromFullText(lines, bundle.fullText || joined);
+  // Quitar PROD inventados y filas con nombre de cabecera/dirección
+  lines = lines.filter((l) => {
+    if (/^PROD-\d+$/i.test(l.reference)) return false;
+    if (l.name && isJunkDesc(l.name) && !isPrefixedSku(l.reference)) return false;
+    return true;
+  });
 
-  if (lines.length > 0) {
+  const columnDoc: DocumentParseResult = {
+    documentNumber: extractDocNumber(joined),
+    documentType: detectType(joined),
+    lines,
+    raw_text: joined,
+  };
+
+  const anyDoc = parseAnyDocument(bundle.fullText || joined);
+  const colScore = scoreParseResult(columnDoc);
+  const anyScore = scoreParseResult(anyDoc);
+  const colHasProd = columnDoc.lines.some((l) => /^PROD-/i.test(l.reference));
+  const anyHasPrefixed = anyDoc.lines.some((l) => isPrefixedSku(l.reference));
+  const colStripsPrefix = columnDoc.lines.some(
+    (l) => /^\d{3,6}$/.test(l.reference) && anyDoc.lines.some((a) => a.reference.endsWith(`-${l.reference}`)),
+  );
+
+  if (
+    anyScore > colScore ||
+    (anyHasPrefixed && (colHasProd || colStripsPrefix || colScore < anyScore + 0.5)) ||
+    (!columnDoc.lines.length && anyDoc.lines.length)
+  ) {
     return {
-      documentNumber: extractDocNumber(joined),
-      documentType: detectType(joined),
-      lines,
-      raw_text: joined,
+      ...anyDoc,
+      raw_text: anyDoc.raw_text || joined,
+      documentNumber: anyDoc.documentNumber || columnDoc.documentNumber,
     };
   }
 
-  return parseAnyDocument(bundle.fullText || joined);
+  if (columnDoc.lines.length > 0) return columnDoc;
+  return anyDoc;
 }

@@ -21,6 +21,7 @@ const BASE_OPTIONS: { id: DocumentProfile | ""; label: string }[] = [
   { id: "", label: "Auto (recomendado)" },
   { id: "easywms", label: "easyWMS / hoja picking" },
   { id: "tosma_cod", label: "Albarán códigos cortos (Tosma…)" },
+  { id: "alb_codigo", label: "Albarán ART-/CBL- (entrega)" },
   { id: "oc_tabla", label: "Orden de compra" },
   { id: "fashion_sku", label: "Fashion SKU…" },
   { id: "picking_list", label: "Picking list web" },

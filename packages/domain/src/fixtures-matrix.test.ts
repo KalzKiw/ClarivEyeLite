@@ -6,6 +6,7 @@ import { parseColumnBundle } from "./column-merge";
 import { parseAnyDocument } from "./document-profiles";
 import { namedLineRatio, passesQualityGate } from "./quality-gate";
 import {
+  FIXTURE_ALB_CODIGO_OCR,
   FIXTURE_EASYWMS,
   FIXTURE_EASYWMS_PICKING,
   FIXTURE_FASHION,
@@ -59,6 +60,19 @@ describe("matriz fixtures ejemplo", () => {
   it("OC: 3 productos", () => {
     const doc = parseAnyDocument(FIXTURE_OC);
     expect(doc.lines.map((l) => l.reference)).toEqual(["78958", "14455", "66888"]);
+    expect(passesQualityGate(doc)).toBe(true);
+  });
+
+  it("albarán ART- columnas OCR: 4 líneas mapeadas", () => {
+    const doc = parseAnyDocument(FIXTURE_ALB_CODIGO_OCR);
+    expect(doc.profile).toBe("alb_codigo");
+    expect(doc.lines.map((l) => l.reference)).toEqual([
+      "ART-0012",
+      "ART-0054",
+      "CBL-1020",
+      "SOP-9921",
+    ]);
+    expect(namedLineRatio(doc)).toBe(1);
     expect(passesQualityGate(doc)).toBe(true);
   });
 

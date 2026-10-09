@@ -15,6 +15,7 @@ export type DocumentProfile =
   | "picking_list"
   | "fashion_sku"
   | "tosma_cod"
+  | "alb_codigo"
   | "oc_tabla"
   | "generic";
 
@@ -55,6 +56,14 @@ export const PROFILE_BANDS: Record<DocumentProfile, ProfileBand> = {
       [0.35, 0.78],
     ],
     columns: { sku: [0.02, 0.12], desc: [0.12, 0.55], nums: [0.55, 0.7] },
+  },
+  /** Albarán entrega: Código | Descripción | Uds/Cajas | Cantidad */
+  alb_codigo: {
+    tableBands: [
+      [0.32, 0.72],
+      [0.28, 0.78],
+    ],
+    columns: { sku: [0.02, 0.18], desc: [0.18, 0.58], nums: [0.58, 0.95] },
   },
   oc_tabla: {
     tableBands: [
@@ -108,10 +117,43 @@ export function detectProfile(text: string): DocumentProfile {
     const uniq = [...new Set(artCodes)].filter((c) => !isNoiseArticleCode(c));
     if (uniq.length >= 3 && /\d+[.,]\d{2}/.test(t)) return "tosma_cod";
   }
+  // Albarán logística: ART-0012 / CBL-1020 + “Cantidad Total” / “uds”
+  {
+    const prefixed = countPrefixedArticleCodes(t);
+    if (
+      prefixed >= 2 &&
+      (/albar[aá]n\s+de\s+entrega|descripci[oó]n\s+del\s+art[ií]culo|uds?\s*\/\s*cajas|cantidad\s+total/i.test(
+        t,
+      ) ||
+        /\b\d+\s+\d+\s*uds?\b/i.test(t))
+    ) {
+      return "alb_codigo";
+    }
+    if (prefixed >= 3 && /albar[aá]n/i.test(t)) return "alb_codigo";
+  }
   if (/orden\s+de\s+compra|\bOC\s*\d|art[ií]culo\s*#/i.test(t)) return "oc_tabla";
   if (/base\s*ud|concepto/i.test(t) && /albar[aá]n/i.test(t)) return "fashion_sku";
   // No forzar Tosma solo por “albarán”: parseAnyDocument compite entre perfiles.
   return "generic";
+}
+
+/** Prefijos de documento/empresa — nunca son SKU de línea */
+const DOC_PREFIX_BLOCK =
+  /^(ALB|PED|OC|OT|FAC|INV|NIF|CIF|IVA|OUT|DL|BATCH|PACK|REF)$/i;
+
+function isPrefixedArticleCode(code: string): boolean {
+  const m = code.trim().match(/^([A-Za-zÁÉÍÓÚÑ]{2,5})-(\d{3,6})$/);
+  if (!m) return false;
+  if (DOC_PREFIX_BLOCK.test(m[1])) return false;
+  return true;
+}
+
+function countPrefixedArticleCodes(text: string): number {
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\b([A-Za-zÁÉÍÓÚÑ]{2,5}-\d{3,6})\b/g)) {
+    if (isPrefixedArticleCode(m[1])) found.add(m[1].toUpperCase());
+  }
+  return found.size;
 }
 
 function detectType(text: string): DocumentType {
@@ -145,12 +187,20 @@ export function extractDocumentNumberForProfile(text: string, profile: DocumentP
   if (profile === "tosma_cod") {
     patterns.push(/n[ºo°.]?\s*albar[aá]n\s*[:#]?\s*([A-Z0-9\s\/\-]+)/i, /\b(A\s*\/\s*\d+)\b/i);
   }
+  if (profile === "alb_codigo") {
+    patterns.push(
+      /n[ºo°.]?\s*albar[aá]n\s*[:#]?\s*(ALB-[\d\-]+)/i,
+      /\b(ALB-\d{4}-\d+)\b/i,
+      /n[ºo°.]?\s*pedido\s*[:#]?\s*(PED-[\w\-]+)/i,
+    );
+  }
   if (profile === "oc_tabla") {
     patterns.push(/n[uú]mero\s+de\s+orden\s*[:#]?\s*(OC\s*[\d\-]+)/i, /\b(OC\s*\d{3,})\b/i);
   }
   patterns.push(
     /n[uú]mero\s+de\s+orden\s*[:#]?\s*(OC\s*[\d\-]+)/i,
     /\b(OC\s*\d{3,})\b/i,
+    /\b(ALB-\d{4}-\d+)\b/i,
     /(?:albar[aá]n|alb\.?)\s*(?:n[ºo°.]?)?\s*[:#]?\s*([A-Z0-9][\w\-\/\s]{1,})/i,
     /orden\s+de\s+salida\s*[:#]?\s*([A-Z0-9_\-]+)/i,
     /order\s*id\s*[#:]?\s*([A-Z0-9_\-#]+)/i,
@@ -479,6 +529,110 @@ function dedupe(lines: DocumentLine[]): DocumentLine[] {
   return [...bag.values()];
 }
 
+const ALB_DESC_STOP =
+  /^(entregar|observaciones|datos\s+de\s+transporte|transportista|matr[ií]cula|bultos|peso|m[eé]todo|p[aá]gina|uds?\s*\/?\s*cajas|cantidad\s+total|lugar\s+de|atenci[oó]n|tlf|nif|agente|logotipo|albar[aá]n\b)/i;
+
+/**
+ * Albarán con códigos PREFIX-NNNN (ART-0012…).
+ * Reglas cuando el OCR separa columnas en bloques:
+ * 1) SKU = solo [A-Z]{2,5}-\d{3,6} excluyendo ALB/PED/OC…
+ * 2) Nombres = líneas tras “Descripción…” hasta stop
+ * 3) Qty = segundo número de “10 10 uds” (Cantidad Total); packages = primero
+ * 4) Zip por índice (mismo orden de columnas)
+ */
+function extractAlbCodigo(text: string): DocumentLine[] {
+  const out: DocumentLine[] = [];
+
+  // 0) Filas inline si el OCR las unió: ART-0012 Monitores … 10 10 uds
+  const inline =
+    /\b([A-Za-zÁÉÍÓÚÑ]{2,5}-\d{3,6})\s+([A-Za-zÁÉÍÓÚÑ][^\n]{3,80}?)\s+(\d{1,4})\s+(\d{1,5})\s*uds?\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inline.exec(text))) {
+    if (!isPrefixedArticleCode(m[1])) continue;
+    const name = m[2].replace(/\s+/g, " ").trim();
+    if (ALB_DESC_STOP.test(name)) continue;
+    out.push(
+      line(m[1].toUpperCase(), name, Number(m[4]), null, 0.95),
+    );
+    out[out.length - 1].packages = Math.max(0, Number(m[3]) || 0);
+  }
+  if (out.length >= 2) return dedupe(out);
+
+  // 1) Códigos de artículo (bloque “Código” o globales)
+  const codes: string[] = [];
+  const pushCode = (c: string) => {
+    const u = c.toUpperCase();
+    if (!isPrefixedArticleCode(u) || codes.includes(u)) return;
+    codes.push(u);
+  };
+  const codeBlock = text.match(
+    /c[oó]digo\s*\n([\s\S]*?)(?=\n\s*observaciones|\n\s*descripci[oó]n|\n\s*datos\s+de|\n\s*uds?\s*\/)/i,
+  );
+  if (codeBlock?.[1]) {
+    for (const raw of codeBlock[1].split(/\n/)) {
+      const t = raw.trim();
+      if (isPrefixedArticleCode(t)) pushCode(t);
+    }
+  }
+  if (codes.length < 2) {
+    for (const hit of text.matchAll(/\b([A-Za-zÁÉÍÓÚÑ]{2,5}-\d{3,6})\b/g)) {
+      pushCode(hit[1]);
+    }
+  }
+  if (codes.length < 1) return [];
+
+  // 2) Descripciones: bloque tras cabecera
+  const names: string[] = [];
+  const descBlock = text.match(
+    /descripci[oó]n(?:\s+del)?\s+art[ií]culo[s]?\s*\n([\s\S]*?)(?=\n\s*(?:entregar|observaciones|datos\s+de\s+transporte|uds?\s*\/\s*cajas|cantidad\s+total|p[aá]gina)\b)/i,
+  );
+  const descSrc = descBlock?.[1] ?? "";
+  for (const raw of descSrc.split(/\n/)) {
+    const t = raw.replace(/\s+/g, " ").trim();
+    if (t.length < 4) continue;
+    if (ALB_DESC_STOP.test(t)) break;
+    if (isPrefixedArticleCode(t)) continue;
+    if (/^\d+([.,]\d+)?\s*(kg|uds?|palets?)?$/i.test(t)) continue;
+    if (/^[+\d\s\-()]{6,}$/.test(t)) continue;
+    names.push(t);
+  }
+
+  // 3) Cantidades: “10 10 uds” → packages=10, quantity=10 (total)
+  type QtyPair = { packages: number; quantity: number };
+  const qtys: QtyPair[] = [];
+  for (const hit of text.matchAll(/\b(\d{1,4})\s+(\d{1,5})\s*uds?\b/gi)) {
+    qtys.push({ packages: Number(hit[1]), quantity: Number(hit[2]) });
+  }
+  // Fallback: tras “Cantidad Total”, pares sueltos
+  if (qtys.length < codes.length) {
+    const qtyZone = text.match(/cantidad\s+total\s*\n([\s\S]*?)(?=\n\s*p[aá]gina|\n\s*datos|\n\s*observaciones|$)/i);
+    if (qtyZone?.[1]) {
+      for (const hit of qtyZone[1].matchAll(/\b(\d{1,4})\s+(\d{1,5})\b/g)) {
+        const pair = { packages: Number(hit[1]), quantity: Number(hit[2]) };
+        if (!qtys.some((q) => q.packages === pair.packages && q.quantity === pair.quantity)) {
+          qtys.push(pair);
+        }
+      }
+    }
+  }
+
+  // 4) Zip por índice (orden de columna OCR)
+  const n = codes.length;
+  for (let i = 0; i < n; i++) {
+    const q = qtys[i];
+    const row = line(
+      codes[i],
+      names[i] ?? null,
+      q?.quantity ?? 1,
+      null,
+      names[i] && q ? 0.93 : names[i] ? 0.88 : 0.78,
+    );
+    row.packages = q?.packages ?? 0;
+    out.push(row);
+  }
+  return dedupe(out);
+}
+
 export function extractByProfile(text: string, profile: DocumentProfile): DocumentLine[] {
   switch (profile) {
     case "easywms":
@@ -489,6 +643,8 @@ export function extractByProfile(text: string, profile: DocumentProfile): Docume
       return extractFashionSku(text);
     case "tosma_cod":
       return extractTosma(text);
+    case "alb_codigo":
+      return extractAlbCodigo(text);
     case "oc_tabla":
       return extractOcTabla(text);
     case "generic":
@@ -512,6 +668,7 @@ function scoreLines(lines: DocumentLine[]): number {
     if (l.quantity > 1) s += 0.12;
     if (l.unitPrice) s += 0.1;
     if (/^(Item|SKU)/i.test(l.reference)) s += 0.35;
+    else if (/^[A-Z]{2,5}-\d{3,6}$/i.test(l.reference) && isPrefixedArticleCode(l.reference)) s += 0.4;
     else if (/^0\d{4,5}$/.test(l.reference) || /^\d{5,6}$/.test(l.reference)) s += 0.3;
     else if (/^\d{2,3}$/.test(l.reference) && (l.name || l.quantity > 1)) s += 0.2;
     // "23"/"14" sin nombre suelen ser qty mal leídas como SKU
@@ -540,6 +697,7 @@ const ALL_PROFILES: DocumentProfile[] = [
   "picking_list",
   "fashion_sku",
   "tosma_cod",
+  "alb_codigo",
   "oc_tabla",
   "generic",
 ];

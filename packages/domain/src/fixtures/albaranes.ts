@@ -108,3 +108,49 @@ ARTÍCULO # DESCRIPCIÓN Cantidad P/U TOTAL
 Subtotal 570,00 €
 TOTAL 689,70 €
 `;
+
+/**
+ * Albarán logística: OCR por columnas (códigos / descripciones / uds en bloques).
+ * Caso real: el texto sale bien pero desordenado.
+ */
+export const FIXTURE_ALB_CODIGO_OCR = `
+LOGOTIPO ALBARÁN DE ENTREGA
+Logística y Distribución S.L. Nº Albarán: ALB-2026-0842
+Av. de la Industria, 45, Nave 3 Fecha: 09 Octubre 2026
+28045 Madrid, España
+Nº Pedido: PED-9931-X
+NIF: B-12345678
+Tlf: +34 900 123 456 Agente: M. Gómez
+Lugar de Entrega (Destinatario)
+Comercializadora del Sur, S.A.
+C/ Gran Vía, 12, Planta Baja
+41001 Sevilla, España
+Atención a: Dpto. de Recepción
+Tlf Contacto: +34 600 000 000
+Código
+ART-0012
+ART-0054
+CBL-1020
+SOP-9921
+Observaciones:
+ser revisada antes de la firma de este documento.
+Albarán ALB-2026-0842 - Logística y Distribución S.L.
+Descripción del Artículo
+Monitores LED 24" Resolut Pro
+Teclados Mecánicos TKL (Layout ES)
+Cables HDMI 2.1 (Bobina 20m)
+Soporte articulado de pared VESA 100
+Entregar por el muelle de carga trasero. Horario de recepción de 09:00 a 14:00h. La mercancía debe
+Datos de Transporte
+Transportista: TransRápidos S.A.
+Matrícula: 4392-LXX
+Bultos Totales: 4 palets
+Peso Total: 340 kg
+Método: Entrega Estándar 48h
+Uds/Cajas Cantidad Total
+10 10 uds
+5 25 uds
+2 50 uds
+1 10 uds
+Página 1
+`;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectProfile, parseAnyDocument, parseWithProfile } from "./document-profiles";
 import {
+  FIXTURE_ALB_CODIGO_OCR,
   FIXTURE_EASYWMS,
   FIXTURE_EASYWMS_PICKING,
   FIXTURE_FASHION,
@@ -58,6 +59,28 @@ describe("document profiles", () => {
     expect(doc.lines[0].reference).toBe("SKU000002");
     expect(doc.lines[0].quantity).toBe(20);
     expect(doc.lines[0].name).toMatch(/Pantalón|Pantalon/i);
+  });
+
+  it("albarán ART-/CBL-: zip columnas OCR + ALB-2026", () => {
+    expect(detectProfile(FIXTURE_ALB_CODIGO_OCR)).toBe("alb_codigo");
+    const doc = parseWithProfile(FIXTURE_ALB_CODIGO_OCR);
+    expect(doc.documentNumber).toMatch(/ALB-2026-0842/i);
+    expect(doc.lines.map((l) => l.reference)).toEqual([
+      "ART-0012",
+      "ART-0054",
+      "CBL-1020",
+      "SOP-9921",
+    ]);
+    expect(doc.lines.map((l) => l.name)).toEqual([
+      'Monitores LED 24" Resolut Pro',
+      "Teclados Mecánicos TKL (Layout ES)",
+      "Cables HDMI 2.1 (Bobina 20m)",
+      "Soporte articulado de pared VESA 100",
+    ]);
+    expect(doc.lines.map((l) => l.quantity)).toEqual([10, 25, 50, 10]);
+    expect(doc.lines.map((l) => l.packages)).toEqual([10, 5, 2, 1]);
+    // No colar teléfono / ALB / PED como producto
+    expect(doc.lines.every((l) => !/ALB-|PED-|\+34|900|600/.test(l.reference))).toBe(true);
   });
 
   it("detecta tosma_cod y líneas de fontanería", () => {
