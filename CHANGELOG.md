@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.21 — 2026-10-09
+
+### ClarivScan — comprobar líneas antes del pedido
+- `line-audit`: marca refs que parecen fecha, teléfono, qty o basura.
+- UI: casilla incluir/excluir, badges de aviso, «confirmar producto» en sospechosas.
+- Crear pedido solo con líneas incluidas y sin sospechosas pendientes.
+
 ## 0.3.20 — 2026-10-09
 
 ### Motor lectura — gate, OCR por página, matriz de ejemplos

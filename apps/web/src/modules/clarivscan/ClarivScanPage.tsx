@@ -1,6 +1,6 @@
-import { canCreateOrder, type AssistedCandidate } from "@clariveye-lite/domain";
-import { Camera, FileUp, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { auditLine, canCreateOrder, type AssistedCandidate, type LineWarning } from "@clariveye-lite/domain";
+import { Camera, CheckCircle2, FileUp, Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
@@ -15,6 +15,11 @@ interface DraftLine {
   name: string;
   quantity: number;
   packages: number;
+  included: boolean;
+  suspicious: boolean;
+  warnings: LineWarning[];
+  /** Usuario marcó «confirmar» en una línea sospechosa */
+  confirmed: boolean;
 }
 
 const SOURCE_LABEL: Record<RecognizeSource, string> = {
@@ -27,6 +32,44 @@ const SOURCE_LABEL: Record<RecognizeSource, string> = {
 
 function barcodeFromRef(ref: string): string {
   return /^\d{8,14}$/.test(ref.trim()) ? ref.trim() : "";
+}
+
+function draftFromParsed(line: {
+  reference: string;
+  name: string | null;
+  quantity: number;
+  packages: number;
+  unitPrice: string | null;
+  confidence: number;
+}): DraftLine {
+  const audited = auditLine(line);
+  return {
+    reference: audited.reference,
+    barcode: barcodeFromRef(audited.reference),
+    name: audited.name ?? "",
+    quantity: audited.quantity,
+    packages: audited.packages,
+    included: !audited.suspicious,
+    suspicious: audited.suspicious,
+    warnings: audited.warnings,
+    confirmed: false,
+  };
+}
+
+function reauditDraft(line: DraftLine): DraftLine {
+  const audited = auditLine({
+    reference: line.reference.trim(),
+    name: line.name.trim() || null,
+    quantity: line.quantity,
+    packages: line.packages,
+    unitPrice: null,
+    confidence: line.suspicious && !line.confirmed ? 0.55 : 0.9,
+  });
+  return {
+    ...line,
+    suspicious: audited.suspicious,
+    warnings: audited.warnings,
+  };
 }
 
 export function ClarivScanPage() {
@@ -43,6 +86,16 @@ export function ClarivScanPage() {
   const [assisted, setAssisted] = useState(false);
   const [candidates, setCandidates] = useState<AssistedCandidate[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
+
+  const includedCount = useMemo(() => lines.filter((l) => l.included).length, [lines]);
+  const suspiciousPending = useMemo(
+    () => lines.filter((l) => l.included && l.suspicious && !l.confirmed).length,
+    [lines],
+  );
+  const excludedSuspicious = useMemo(
+    () => lines.filter((l) => !l.included && l.suspicious).length,
+    [lines],
+  );
 
   async function onFile(file: File | null, forceOcr = false) {
     if (!file) return;
@@ -67,31 +120,28 @@ export function ClarivScanPage() {
       setCandidates(parsed.candidates ?? []);
 
       if (parsed.lines.length > 0) {
-        setLines(
-          parsed.lines.map((line) => ({
-            reference: line.reference,
-            barcode: barcodeFromRef(line.reference),
-            name: line.name ?? "",
-            quantity: line.quantity,
-            packages: line.packages,
-          })),
-        );
+        const drafted = parsed.lines.map(draftFromParsed);
+        setLines(drafted);
+        const bad = drafted.filter((l) => l.suspicious).length;
+        if (bad > 0) {
+          setStatus(
+            `${drafted.length} línea(s) · ${bad} a revisar · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
+          );
+        } else if (parsed.assisted) {
+          setStatus(`Revisa candidatos · ${SOURCE_LABEL[parsed.source]}${profileLabel}`);
+        } else {
+          setStatus(
+            `${parsed.lines.length} producto(s) · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
+          );
+        }
       } else {
         setLines([]);
-      }
-
-      if (parsed.assisted) {
-        setError("");
-        setStatus(
-          `Revisa candidatos · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
-        );
-      } else if (parsed.lines.length === 0) {
-        setError("Sin productos claros. Usa candidatos, entrena o añade a mano.");
-        setStatus("");
-      } else {
-        setStatus(
-          `${parsed.lines.length} producto(s) · ${SOURCE_LABEL[parsed.source]}${profileLabel}`,
-        );
+        if (parsed.assisted) {
+          setStatus(`Revisa candidatos · ${SOURCE_LABEL[parsed.source]}${profileLabel}`);
+        } else {
+          setError("Sin productos claros. Usa candidatos, entrena o añade a mano.");
+          setStatus("");
+        }
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo leer el documento");
@@ -106,7 +156,17 @@ export function ClarivScanPage() {
   function addManual() {
     setLines((prev) => [
       ...prev,
-      { reference: "", barcode: "", name: "", quantity: 1, packages: 0 },
+      {
+        reference: "",
+        barcode: "",
+        name: "",
+        quantity: 1,
+        packages: 0,
+        included: true,
+        suspicious: false,
+        warnings: [],
+        confirmed: true,
+      },
     ]);
   }
 
@@ -116,13 +176,14 @@ export function ClarivScanPage() {
         if (prev.some((l) => l.reference === c.reference)) return prev;
         return [
           ...prev,
-          {
+          draftFromParsed({
             reference: c.reference,
-            barcode: barcodeFromRef(c.reference),
-            name: "",
+            name: null,
             quantity: 1,
             packages: 0,
-          },
+            unitPrice: null,
+            confidence: 0.6,
+          }),
         ];
       });
       return;
@@ -132,7 +193,9 @@ export function ClarivScanPage() {
         if (!prev.length) return prev;
         const last = prev[prev.length - 1];
         const qty = Math.max(1, Number(c.reference) || 1);
-        return prev.map((l, i) => (i === prev.length - 1 ? { ...last, quantity: qty } : l));
+        return prev.map((l, i) =>
+          i === prev.length - 1 ? reauditDraft({ ...last, quantity: qty }) : l,
+        );
       });
     }
   }
@@ -143,7 +206,30 @@ export function ClarivScanPage() {
   }
 
   function updateLine(index: number, patch: Partial<DraftLine>) {
-    setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+    setLines((prev) =>
+      prev.map((line, i) => {
+        if (i !== index) return line;
+        const next = { ...line, ...patch };
+        if ("reference" in patch || "name" in patch) {
+          return reauditDraft({ ...next, confirmed: false });
+        }
+        return next;
+      }),
+    );
+  }
+
+  function toggleIncluded(index: number) {
+    setLines((prev) =>
+      prev.map((line, i) => (i === index ? { ...line, included: !line.included } : line)),
+    );
+  }
+
+  function confirmSuspicious(index: number) {
+    setLines((prev) =>
+      prev.map((line, i) =>
+        i === index ? { ...line, confirmed: true, included: true, suspicious: false, warnings: [] } : line,
+      ),
+    );
   }
 
   function removeLine(index: number) {
@@ -157,7 +243,14 @@ export function ClarivScanPage() {
       setError("Límite free: 3 pedidos abiertos. Pasa a Pro o entrega uno.");
       return;
     }
+    if (suspiciousPending > 0) {
+      setError(
+        `Hay ${suspiciousPending} línea(s) sospechosa(s) incluidas. Confírmalas o exclúyelas antes de crear el pedido.`,
+      );
+      return;
+    }
     const clean = lines
+      .filter((line) => line.included)
       .map((line) => ({
         reference: line.reference.trim(),
         barcode: line.barcode.trim() || null,
@@ -167,7 +260,7 @@ export function ClarivScanPage() {
       }))
       .filter((line) => line.reference);
     if (clean.length === 0) {
-      setError("Añade al menos un producto con referencia");
+      setError("Incluye al menos un producto con referencia (marca la casilla)");
       return;
     }
     const order = createOrderFromLines(docNumber, clean);
@@ -278,6 +371,21 @@ export function ClarivScanPage() {
         </Card>
       ) : null}
 
+      {lines.some((l) => l.suspicious) ? (
+        <Card className="space-y-2 border-amber-500/50 bg-amber-500/10 p-3">
+          <p className="text-sm font-medium text-amber-950 dark:text-amber-100">
+            Revisa antes de crear el pedido
+          </p>
+          <p className="text-xs text-muted-foreground">
+            El texto se leyó bien, pero algunas líneas no parecen productos (fechas, teléfonos,
+            cantidades…). Desmarca lo que no sea, o confirma si sí lo es.
+            {excludedSuspicious > 0
+              ? ` · ${excludedSuspicious} excluida(s) automáticamente.`
+              : ""}
+          </p>
+        </Card>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <Button type="button" variant="ghost" className="flex-1 gap-2" onClick={addManual}>
           <Plus size={16} />
@@ -326,9 +434,28 @@ export function ClarivScanPage() {
 
       <div className="space-y-2">
         {lines.map((line, index) => (
-          <Card key={`${line.reference}-${index}`} className="space-y-2 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-primary">Producto {index + 1}</p>
+          <Card
+            key={`${line.reference}-${index}`}
+            className={`space-y-2 p-3 ${
+              !line.included
+                ? "opacity-55 border-dashed"
+                : line.suspicious && !line.confirmed
+                  ? "border-amber-500/60 bg-amber-500/5"
+                  : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium">
+                <input
+                  type="checkbox"
+                  checked={line.included}
+                  onChange={() => toggleIncluded(index)}
+                  className="size-4 accent-primary"
+                />
+                <span className={line.included ? "text-primary" : "text-muted-foreground"}>
+                  {line.included ? `Incluir · producto ${index + 1}` : `Excluida · línea ${index + 1}`}
+                </span>
+              </label>
               <button
                 type="button"
                 onClick={() => removeLine(index)}
@@ -337,6 +464,32 @@ export function ClarivScanPage() {
                 <Trash2 size={16} />
               </button>
             </div>
+
+            {line.warnings.length > 0 ? (
+              <ul className="flex flex-wrap gap-1">
+                {line.warnings.map((w) => (
+                  <li
+                    key={w.code}
+                    className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-950 dark:text-amber-100"
+                  >
+                    {w.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            {line.suspicious && !line.confirmed ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-8 w-full gap-1.5 text-xs"
+                onClick={() => confirmSuspicious(index)}
+              >
+                <CheckCircle2 size={14} />
+                Confirmar: sí es un producto
+              </Button>
+            ) : null}
+
             <Field label="Referencia / SKU">
               <TextInput
                 value={line.reference}
@@ -382,12 +535,14 @@ export function ClarivScanPage() {
 
       <Button
         type="button"
-        disabled={busy || lines.length === 0}
+        disabled={busy || includedCount === 0 || suspiciousPending > 0}
         onClick={confirmOrder}
         className="w-full gap-2"
       >
         <FileUp size={16} />
-        Crear pedido en ClarivEye Lite
+        {suspiciousPending > 0
+          ? `Confirma o excluye ${suspiciousPending} sospechosa(s)`
+          : `Crear pedido · ${includedCount} línea(s)`}
       </Button>
     </div>
   );
