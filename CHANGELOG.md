@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.25 — 2026-10-09
+
+### Free limit — modal Pro + banner
+- `UpgradeModal` al tocar el límite (ClarivScan / Pedidos).
+- `FreeLimitBanner` con CTA “Suscribirse a Pro”.
+
 ## 0.3.24 — 2026-10-09
 
 ### Contrato lectura adaptable

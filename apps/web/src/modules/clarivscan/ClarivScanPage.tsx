@@ -1,14 +1,17 @@
 import {
   auditLine,
   canCreateOrder,
+  countOpenOrders,
   isProductLine,
   type AssistedCandidate,
   type LineWarning,
 } from "@clariveye-lite/domain";
 import { Camera, CheckCircle2, FileUp, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
+import { FreeLimitBanner } from "@/components/FreeLimitBanner";
+import { UpgradeModal } from "@/components/UpgradeModal";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { getActiveDocProfile } from "@/lib/doc-profiles-store";
 import { recognizeDocumentStructured, type RecognizeSource } from "@/lib/ocr";
@@ -95,6 +98,16 @@ export function ClarivScanPage() {
   const [assisted, setAssisted] = useState(false);
   const [candidates, setCandidates] = useState<AssistedCandidate[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [openCount, setOpenCount] = useState(() => countOpenOrders(loadOrders()));
+  const [freeBlocked, setFreeBlocked] = useState(() => !canCreateOrder(loadOrders(), loadPlan()));
+
+  useEffect(() => {
+    const orders = loadOrders();
+    const plan = loadPlan();
+    setOpenCount(countOpenOrders(orders));
+    setFreeBlocked(!canCreateOrder(orders, plan));
+  }, []);
 
   const includedCount = useMemo(() => lines.filter((l) => l.included).length, [lines]);
   const suspiciousPending = useMemo(
@@ -247,11 +260,20 @@ export function ClarivScanPage() {
     setLines((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function refreshPlanGate() {
+    const orders = loadOrders();
+    const plan = loadPlan();
+    setOpenCount(countOpenOrders(orders));
+    setFreeBlocked(!canCreateOrder(orders, plan));
+  }
+
   function confirmOrder() {
     const orders = loadOrders();
     const plan = loadPlan();
     if (!canCreateOrder(orders, plan)) {
-      setError("Límite free: 3 pedidos abiertos. Pasa a Pro o entrega uno.");
+      setFreeBlocked(true);
+      setOpenCount(countOpenOrders(orders));
+      setUpgradeOpen(true);
       return;
     }
     if (suspiciousPending > 0) {
@@ -294,6 +316,10 @@ export function ClarivScanPage() {
           </p>
         </div>
       </div>
+
+      {freeBlocked ? (
+        <FreeLimitBanner openCount={openCount} onOpenUpgrade={() => setUpgradeOpen(true)} />
+      ) : null}
 
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-7 text-center shadow-sm transition active:scale-[0.99]">
@@ -572,6 +598,13 @@ export function ClarivScanPage() {
           ? `Confirma o excluye ${suspiciousPending} sospechosa(s)`
           : `Crear pedido · ${includedCount} línea(s)`}
       </Button>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        openCount={openCount}
+        onClose={() => setUpgradeOpen(false)}
+        onUpgraded={refreshPlanGate}
+      />
     </div>
   );
 }

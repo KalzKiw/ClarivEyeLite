@@ -9,7 +9,9 @@ import {
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { FreeLimitBanner } from "@/components/FreeLimitBanner";
 import { OrderSheet } from "@/components/OrderSheet";
+import { UpgradeModal } from "@/components/UpgradeModal";
 import { Card, StatusPill } from "@/components/ui";
 import { loadOrders, loadPlan } from "@/lib/store";
 
@@ -17,6 +19,7 @@ export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [plan, setPlan] = useState(loadPlan());
   const [openId, setOpenId] = useState<string | null>(null);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
     setOrders(loadOrders());
@@ -33,24 +36,32 @@ export function OrdersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Pedidos de salida</h1>
           <p className="text-sm text-muted-foreground">
-            Plan {plan} · {openCount}/{plan === "free" ? FREE_OPEN_LIMIT : "∞"} abiertos · toca un pedido
+            Plan {plan} · {openCount}/{plan === "free" ? FREE_OPEN_LIMIT : "∞"} abiertos · toca un
+            pedido
           </p>
         </div>
-        <Link
-          to="/clarivscan"
-          className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition active:scale-[0.97] hover:brightness-110 ${
-            freeBlocked ? "pointer-events-none opacity-50" : ""
-          }`}
-        >
-          <Plus size={16} />
-          ClarivScan
-        </Link>
+        {freeBlocked ? (
+          <button
+            type="button"
+            onClick={() => setUpgradeOpen(true)}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition active:scale-[0.97] hover:brightness-110"
+          >
+            <Plus size={16} />
+            ClarivScan
+          </button>
+        ) : (
+          <Link
+            to="/clarivscan"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition active:scale-[0.97] hover:brightness-110"
+          >
+            <Plus size={16} />
+            ClarivScan
+          </Link>
+        )}
       </div>
 
       {freeBlocked ? (
-        <p className="rounded-md border border-[hsl(var(--status-empresa-bg))]/40 bg-[hsl(var(--status-empresa-bg))]/10 px-3 py-2 text-sm text-foreground">
-          Límite free: cierra un pedido o pasa a Pro para seguir con ClarivScan.
-        </p>
+        <FreeLimitBanner openCount={openCount} onOpenUpgrade={() => setUpgradeOpen(true)} />
       ) : null}
 
       <div className="space-y-3">
@@ -96,9 +107,21 @@ export function OrdersPage() {
         onClose={() => {
           setOpenId(null);
           setOrders(loadOrders());
+          setPlan(loadPlan());
         }}
         onChange={(next) => {
           setOrders(next);
+          setPlan(loadPlan());
+        }}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        openCount={openCount}
+        onClose={() => setUpgradeOpen(false)}
+        onUpgraded={() => {
+          setPlan(loadPlan());
+          setOrders(loadOrders());
         }}
       />
     </div>
