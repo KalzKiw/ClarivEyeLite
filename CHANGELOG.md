@@ -1,5 +1,10 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.3 — 2026-10-09
+
+### Login
+- Pantalla de acceso rediseñada: panel de marca + formulario glass, tipografía Fraunces/Sora, campos con iconos y ver contraseña, animaciones de paso (`motion`).
+
 ## 0.3.2 — 2026-10-09
 
 ### Lector PDF — contrato “nunca te dejo tirado”
