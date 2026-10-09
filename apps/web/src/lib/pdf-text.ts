@@ -68,18 +68,21 @@ export async function renderPdfPageToCanvas(
   return canvas;
 }
 
-/** Raster de todas las páginas apiladas verticalmente (OCR multi-página). */
-export async function renderAllPdfPagesToCanvas(
+/** Número de páginas del PDF (para OCR página a página). */
+export async function getPdfNumPages(file: File): Promise<number> {
+  const pdf = await loadPdf(file);
+  return pdf.numPages;
+}
+
+/** Raster de cada página por separado (bandas Y correctas por hoja). */
+export async function renderPdfPagesSeparately(
   file: File,
   scale = 2.8,
   maxPages = 6,
-): Promise<{ canvas: HTMLCanvasElement; numPages: number }> {
+): Promise<HTMLCanvasElement[]> {
   const pdf = await loadPdf(file);
   const n = Math.min(pdf.numPages, maxPages);
   const pages: HTMLCanvasElement[] = [];
-  let totalH = 0;
-  let maxW = 0;
-
   for (let i = 1; i <= n; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale });
@@ -89,13 +92,26 @@ export async function renderAllPdfPagesToCanvas(
     const ctx = c.getContext("2d")!;
     await page.render({ canvasContext: ctx, viewport, canvas: c }).promise;
     pages.push(c);
-    totalH += c.height;
-    maxW = Math.max(maxW, c.width);
   }
+  return pages;
+}
 
+/** @deprecated Preferir renderPdfPagesSeparately — apilar rompe bandas Y multipágina. */
+export async function renderAllPdfPagesToCanvas(
+  file: File,
+  scale = 2.8,
+  maxPages = 6,
+): Promise<{ canvas: HTMLCanvasElement; numPages: number }> {
+  const pages = await renderPdfPagesSeparately(file, scale, maxPages);
+  let totalH = 0;
+  let maxW = 0;
+  for (const p of pages) {
+    totalH += p.height;
+    maxW = Math.max(maxW, p.width);
+  }
   const canvas = document.createElement("canvas");
   canvas.width = maxW;
-  canvas.height = totalH;
+  canvas.height = totalH || 1;
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -104,7 +120,7 @@ export async function renderAllPdfPagesToCanvas(
     ctx.drawImage(p, 0, y);
     y += p.height;
   }
-  return { canvas, numPages: n };
+  return { canvas, numPages: pages.length };
 }
 
 export function isPdfFile(file: File): boolean {

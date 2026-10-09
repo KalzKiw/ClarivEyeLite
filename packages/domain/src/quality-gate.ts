@@ -39,19 +39,35 @@ export function scoreParseResult(doc: DocumentParseResult): number {
   return score;
 }
 
+/** % de líneas con nombre usable (≥2 chars). */
+export function namedLineRatio(doc: DocumentParseResult): number {
+  const lines = cleanLines(doc.lines);
+  if (!lines.length) return 0;
+  const named = lines.filter((l) => !!l.name && l.name.trim().length >= 2).length;
+  return named / lines.length;
+}
+
 /**
- * Gate duro: ≥2 refs limpias, o 1 ref muy sólida (Item/SKU + nombre + qty).
+ * Gate duro: refs limpias + ratio de nombres (evita “OK” con solo códigos pelados).
+ * ≥2 líneas: score≥4 y (namedRatio≥0.5 o ≥2 nombres).
+ * 1 línea: Item/SKU con nombre, o nombre≥3 + qty.
  */
 export function passesQualityGate(doc: DocumentParseResult): boolean {
   const lines = cleanLines(doc.lines);
-  if (lines.length >= 2) return scoreParseResult({ ...doc, lines }) >= 4;
+  const score = scoreParseResult({ ...doc, lines });
+  const ratio = namedLineRatio({ ...doc, lines });
+  const namedCount = lines.filter((l) => !!l.name && l.name.trim().length >= 2).length;
+
+  if (lines.length >= 2) {
+    return score >= 4 && (ratio >= 0.5 || namedCount >= 2);
+  }
   if (lines.length === 1) {
     const l = lines[0];
     const solid =
       (!!l.name && l.name.trim().length >= 3 && l.quantity >= 1) ||
-      /^Item\d+$/i.test(l.reference) ||
-      /^SKU\d+/i.test(l.reference);
-    return solid && scoreParseResult({ ...doc, lines }) >= 3.5;
+      (/^Item\d+$/i.test(l.reference) && !!l.name) ||
+      (/^SKU\d+/i.test(l.reference) && !!l.name);
+    return solid && score >= 3.5;
   }
   return false;
 }

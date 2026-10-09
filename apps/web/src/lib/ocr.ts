@@ -6,11 +6,13 @@ import {
   buildColumnRowsFromTexts,
   parseAnyDocument,
   parseColumnBundle,
+  namedLineRatio,
   passesQualityGate,
   scoreLayoutText,
   scoreParseResult,
   withCleanLines,
   type AssistedCandidate,
+  type DocumentLine,
   type DocumentParseResult,
   type DocumentProfile,
   type ProfileBand,
@@ -20,8 +22,8 @@ import { getActiveDocProfile, recordProfileOutcome } from "@/lib/doc-profiles-st
 import {
   extractPdfLayout,
   isPdfFile,
-  renderAllPdfPagesToCanvas,
   renderPdfPageToCanvas,
+  renderPdfPagesSeparately,
 } from "@/lib/pdf-text";
 import { recordScanStat } from "@/lib/scan-stats";
 
@@ -318,40 +320,89 @@ async function recognizeFromCanvas(
   return best;
 }
 
-async function ocrFromFile(file: File, onStatus?: (msg: string) => void): Promise<RecognizeResult> {
-  let sourceCanvas: HTMLCanvasElement;
-
-  if (isPdfFile(file)) {
-    onStatus?.("PDF raster (todas las páginas)…");
-    const { canvas } = await renderAllPdfPagesToCanvas(file, 2.8, 6);
-    sourceCanvas = canvas;
-  } else {
-    onStatus?.("Preparando imagen…");
-    const bitmap = await createImageBitmap(file);
-    sourceCanvas = document.createElement("canvas");
-    const scale = Math.max(bitmap.width, bitmap.height) < 1400 ? 2.4 : 1.5;
-    sourceCanvas.width = Math.round(bitmap.width * scale);
-    sourceCanvas.height = Math.round(bitmap.height * scale);
-    const fctx = sourceCanvas.getContext("2d", { willReadFrequently: true })!;
-    fctx.fillStyle = "#fff";
-    fctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
-    fctx.drawImage(bitmap, 0, 0, sourceCanvas.width, sourceCanvas.height);
-    bitmap.close();
+function mergePageResults(pages: RecognizeResult[]): RecognizeResult {
+  if (!pages.length) {
+    return {
+      documentNumber: null,
+      documentType: "desconocido",
+      lines: [],
+      raw_text: "",
+      source: "ocr",
+    };
   }
+  const byRef = new Map<string, DocumentLine>();
+  for (const page of pages) {
+    for (const line of page.lines) {
+      const key = line.reference.toLowerCase();
+      const prev = byRef.get(key);
+      if (!prev || line.confidence > prev.confidence || (!prev.name && line.name)) {
+        byRef.set(key, line);
+      }
+    }
+  }
+  const bestPage = pages.reduce((a, b) =>
+    scoreParseResult(b) > scoreParseResult(a) ? b : a,
+  );
+  const merged: RecognizeResult = {
+    ...bestPage,
+    lines: [...byRef.values()],
+    raw_text: pages.map((p) => p.raw_text).filter(Boolean).join("\n\n"),
+    documentNumber: pages.find((p) => p.documentNumber)?.documentNumber ?? bestPage.documentNumber,
+    source: pages.some((p) => p.source === "trained") ? "trained" : "ocr",
+  };
+  return withSource(withCleanLines(merged), merged.source);
+}
 
+async function prepareCanvasGray(sourceCanvas: HTMLCanvasElement) {
   const ctx = sourceCanvas.getContext("2d", { willReadFrequently: true })!;
   toGrayContrast(ctx, sourceCanvas.width, sourceCanvas.height, 1.25);
+}
 
+async function ocrFromFile(file: File, onStatus?: (msg: string) => void): Promise<RecognizeResult> {
+  if (isPdfFile(file)) {
+    onStatus?.("PDF raster página a página…");
+    const pages = await renderPdfPagesSeparately(file, 2.8, 6);
+    const results: RecognizeResult[] = [];
+    for (let i = 0; i < pages.length; i++) {
+      onStatus?.(`OCR página ${i + 1}/${pages.length}…`);
+      await prepareCanvasGray(pages[i]);
+      const pageResult = await recognizeFromCanvas(pages[i], onStatus);
+      results.push(pageResult);
+      const mergedSoFar = mergePageResults(results);
+      if (passesQualityGate(mergedSoFar) && i === 0 && pages.length === 1) {
+        return mergedSoFar;
+      }
+    }
+    return mergePageResults(results);
+  }
+
+  onStatus?.("Preparando imagen…");
+  const bitmap = await createImageBitmap(file);
+  const sourceCanvas = document.createElement("canvas");
+  const scale = Math.max(bitmap.width, bitmap.height) < 1400 ? 2.4 : 1.5;
+  sourceCanvas.width = Math.round(bitmap.width * scale);
+  sourceCanvas.height = Math.round(bitmap.height * scale);
+  const fctx = sourceCanvas.getContext("2d", { willReadFrequently: true })!;
+  fctx.fillStyle = "#fff";
+  fctx.fillRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+  fctx.drawImage(bitmap, 0, 0, sourceCanvas.width, sourceCanvas.height);
+  bitmap.close();
+  await prepareCanvasGray(sourceCanvas);
   return recognizeFromCanvas(sourceCanvas, onStatus);
 }
 
 function finish(result: RecognizeResult): RecognizeResult {
   const ok = passesQualityGate(result) && !result.assisted;
+  const lines = result.lines ?? [];
+  const named = lines.filter((l) => !!l.name && l.name.trim().length >= 2).length;
   recordScanStat({
     source: result.source,
     score: result.qualityScore ?? scoreParseResult(result),
     ok,
     assisted: !!result.assisted,
+    lineCount: lines.length,
+    namedLineCount: named,
+    namedLineRate: namedLineRatio(result),
   });
   return result;
 }
@@ -435,5 +486,5 @@ export async function recognizeDocument(file: File): Promise<string> {
   return doc.raw_text;
 }
 
-/** @deprecated use renderAllPdfPagesToCanvas — kept for TrainParserPage single preview */
+/** Preview de una página (entrenar). OCR multipágina usa renderPdfPagesSeparately. */
 export { renderPdfPageToCanvas };

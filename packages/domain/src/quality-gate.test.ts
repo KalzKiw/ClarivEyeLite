@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractAssistedCandidates,
+  namedLineRatio,
   passesQualityGate,
   scoreParseResult,
 } from "./quality-gate";
@@ -55,5 +56,25 @@ describe("quality-gate", () => {
     const c = extractAssistedCandidates("Item12 Chocolate 1 [UN]\n000113 20.00 48.83");
     expect(c.some((x) => x.reference === "Item12")).toBe(true);
     expect(c.some((x) => x.reference === "000113")).toBe(true);
+  });
+
+  it("rechaza ≥2 refs sin nombre (éxito vacío)", () => {
+    const d = doc([
+      { reference: "78958", name: null, quantity: 1, packages: 0, unitPrice: null, confidence: 0.8 },
+      { reference: "14455", name: null, quantity: 1, packages: 0, unitPrice: null, confidence: 0.8 },
+      { reference: "66888", name: null, quantity: 1, packages: 0, unitPrice: null, confidence: 0.8 },
+    ]);
+    expect(namedLineRatio(d)).toBe(0);
+    expect(passesQualityGate(d)).toBe(false);
+  });
+
+  it("acepta mayoría con nombre aunque alguna línea vaya sin él", () => {
+    const d = doc([
+      { reference: "78958", name: "Producto X", quantity: 2, packages: 0, unitPrice: "10.00", confidence: 0.9 },
+      { reference: "14455", name: "Producto T", quantity: 5, packages: 0, unitPrice: "50.00", confidence: 0.9 },
+      { reference: "66888", name: null, quantity: 1, packages: 0, unitPrice: null, confidence: 0.7 },
+    ]);
+    expect(namedLineRatio(d)).toBeGreaterThanOrEqual(0.5);
+    expect(passesQualityGate(d)).toBe(true);
   });
 });

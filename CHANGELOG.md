@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.20 — 2026-10-09
+
+### Motor lectura — gate, OCR por página, matriz de ejemplos
+- QualityGate exige ratio de nombres (≥50% o ≥2); evita “OK” solo con códigos.
+- OCR PDF página a página (bandas Y correctas); merge de líneas entre páginas.
+- `scan-stats`: namedLineRate; test matriz con easyWMS/picking/fashion/Tosma/OC.
+
 ## 0.3.19 — 2026-10-09
 
 ### Motor lectura — filas afines

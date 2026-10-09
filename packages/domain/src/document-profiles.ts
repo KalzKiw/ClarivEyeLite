@@ -498,7 +498,7 @@ export function extractByProfile(text: string, profile: DocumentProfile): Docume
   }
 }
 
-/** Score de calidad (no solo “más líneas”): castiga refs tipo qty sueltas. */
+/** Score de calidad (no solo “más líneas”): castiga refs tipo qty/fecha sueltas. */
 function scoreLines(lines: DocumentLine[]): number {
   if (!lines.length) return -1;
   let sum = 0;
@@ -511,9 +511,13 @@ function scoreLines(lines: DocumentLine[]): number {
     }
     if (l.quantity > 1) s += 0.12;
     if (l.unitPrice) s += 0.1;
-    if (l.reference.length >= 5 || /^(Item|SKU)/i.test(l.reference)) s += 0.25;
+    if (/^(Item|SKU)/i.test(l.reference)) s += 0.35;
+    else if (/^0\d{4,5}$/.test(l.reference) || /^\d{5,6}$/.test(l.reference)) s += 0.3;
+    else if (/^\d{2,3}$/.test(l.reference) && (l.name || l.quantity > 1)) s += 0.2;
     // "23"/"14" sin nombre suelen ser qty mal leídas como SKU
-    if (/^\d{1,3}$/.test(l.reference) && !l.name) s -= 1.25;
+    if (/^\d{1,3}$/.test(l.reference) && !l.name && l.quantity <= 1) s -= 1.25;
+    // Fechas / teléfonos colados como ref (28042023, 12124551…)
+    if (/^\d{7,}$/.test(l.reference) && !l.name) s -= 1.8;
     sum += s;
   }
   return sum + named * 0.55 + Math.min(lines.length, 10) * 0.25;
@@ -562,8 +566,8 @@ export function parseAnyDocument(rawText: string): ProfileParseResult {
   for (const profile of ALL_PROFILES) {
     const lines = extractByProfile(raw_text, profile);
     const score = scoreLines(lines);
-    // Empate: preferir el perfil detectado
-    const tieBreak = profile === detected ? 0.05 : 0;
+    // Preferir fuerte el perfil detectado (evita que basura de otro extractor gane)
+    const tieBreak = profile === detected ? 2.5 : 0;
     if (score + tieBreak > bestScore) {
       bestScore = score + tieBreak;
       best = {
