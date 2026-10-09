@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.12 — 2026-10-09
+
+### Login — pack hueco, giro y cámara por fase
+- Caja hueca (labio frontal + luz interior); ítems hover→drop con squash; 2 solapas.
+- Seal: giro 360° nítido + cinta/etiqueta; ship con anticipación; fondo almacén.
+- Variantes por ciclo (paleta, sentido, cámara) para menos repetición (~8.4 s).
+
 ## 0.3.11 — 2026-10-09
 
 ### Login — pack cartoon con contenido + puff

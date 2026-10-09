@@ -4,93 +4,247 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import type { Group, Mesh, MeshStandardMaterial } from "three";
 import * as THREE from "three";
 
-/** Loop cartoon: llega → fill → pack → seal → whoosh + puff. */
-const PERIOD = 6.2;
+/**
+ * Loop pack cartoon (~8.4 s):
+ * arrive → fill (coloca 3) → pack (2 solapas) → seal (giro + cinta + label) → ship → gap
+ * Variantes por ciclo: paleta, sentido de giro, ángulo de cámara.
+ */
+const PERIOD = 8.4;
 
 type Phase = "arrive" | "fill" | "pack" | "seal" | "ship" | "gap";
+
+type ItemSpec = {
+  color: string;
+  size: readonly [number, number, number];
+  x: number;
+  z: number;
+};
+
+const PALETTES: ItemSpec[][] = [
+  [
+    { color: "#3b82f6", size: [0.14, 0.19, 0.14], x: -0.15, z: 0.05 },
+    { color: "#14b8a6", size: [0.17, 0.11, 0.15], x: 0.07, z: -0.08 },
+    { color: "#f59e0b", size: [0.19, 0.055, 0.13], x: 0.13, z: 0.1 },
+  ],
+  [
+    { color: "#ef4444", size: [0.13, 0.17, 0.13], x: -0.11, z: -0.07 },
+    { color: "#8b5cf6", size: [0.18, 0.09, 0.16], x: 0.09, z: 0.06 },
+    { color: "#22c55e", size: [0.11, 0.21, 0.11], x: -0.02, z: 0.11 },
+  ],
+  [
+    { color: "#0ea5e9", size: [0.16, 0.08, 0.16], x: -0.13, z: 0.03 },
+    { color: "#f97316", size: [0.12, 0.18, 0.12], x: 0.11, z: -0.06 },
+    { color: "#eab308", size: [0.2, 0.05, 0.12], x: 0.02, z: 0.09 },
+  ],
+];
+
+const BOX_W = 0.8;
+const BOX_H = 0.42;
+const BOX_D = 0.56;
+const WALL = 0.03;
+const FLOOR_T = 0.038;
+const INNER_Y0 = -BOX_H / 2 + FLOOR_T;
+
+type AnimShared = {
+  phase: Phase;
+  u: number;
+  cycle: number;
+  fill: number;
+  spinDir: number;
+};
 
 function ease(t: number) {
   const x = THREE.MathUtils.clamp(t, 0, 1);
   return x * x * x * (x * (x * 6 - 15) + 10);
 }
 
+function easeOutCubic(t: number) {
+  const x = 1 - THREE.MathUtils.clamp(t, 0, 1);
+  return 1 - x * x * x;
+}
+
 function easeBack(t: number) {
   const x = THREE.MathUtils.clamp(t, 0, 1);
-  const c1 = 1.7;
+  const c1 = 1.85;
   const c3 = c1 + 1;
   return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2;
 }
 
-function phaseAt(elapsed: number, reduced: boolean): { phase: Phase; u: number } {
-  if (reduced) return { phase: "seal", u: 1 };
+function phaseAt(elapsed: number, reduced: boolean): { phase: Phase; u: number; cycle: number } {
+  if (reduced) return { phase: "seal", u: 1, cycle: 0 };
+  const cycle = Math.floor(elapsed / PERIOD);
   const p = (elapsed % PERIOD) / PERIOD;
-  if (p < 0.16) return { phase: "arrive", u: ease(p / 0.16) };
-  if (p < 0.36) return { phase: "fill", u: (p - 0.16) / 0.2 };
-  if (p < 0.48) return { phase: "pack", u: easeBack((p - 0.36) / 0.12) };
-  if (p < 0.64) return { phase: "seal", u: ease((p - 0.48) / 0.16) };
-  if (p < 0.86) return { phase: "ship", u: (p - 0.64) / 0.22 };
-  return { phase: "gap", u: (p - 0.86) / 0.14 };
+  // Pausas cortas entre beats vía tramos asimétricos
+  if (p < 0.11) return { phase: "arrive", u: ease(p / 0.11), cycle };
+  if (p < 0.4) return { phase: "fill", u: (p - 0.11) / 0.29, cycle };
+  if (p < 0.5) return { phase: "pack", u: easeBack((p - 0.4) / 0.1), cycle };
+  if (p < 0.74) return { phase: "seal", u: (p - 0.5) / 0.24, cycle };
+  if (p < 0.92) return { phase: "ship", u: (p - 0.74) / 0.18, cycle };
+  return { phase: "gap", u: (p - 0.92) / 0.08, cycle };
 }
 
 function RenderTune() {
   const { gl } = useThree();
   useEffect(() => {
     gl.toneMapping = THREE.ACESFilmicToneMapping;
-    gl.toneMappingExposure = 1.1;
+    gl.toneMappingExposure = 1.14;
     gl.outputColorSpace = THREE.SRGBColorSpace;
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
   }, [gl]);
   return null;
 }
 
-const ITEMS = [
-  { color: "#3b82f6", size: [0.14, 0.2, 0.14] as const, x: -0.16, z: 0.05 },
-  { color: "#14b8a6", size: [0.18, 0.12, 0.16] as const, x: 0.05, z: -0.08 },
-  { color: "#f59e0b", size: [0.2, 0.06, 0.14] as const, x: 0.14, z: 0.1 },
-] as const;
+function Cardboard({ color = "#c9966c" }: { color?: string }) {
+  return <meshStandardMaterial color={color} roughness={0.82} metalness={0.02} />;
+}
 
-const FLOOR_Y = -0.02;
+/** Hueca de verdad: suelo + 3 paredes altas + labio frontal bajo. */
+function HollowShell() {
+  const outer = "#c9966c";
+  const inner = "#7a4e32";
+  const h = BOX_H;
+  const w = BOX_W;
+  const d = BOX_D;
+  const t = WALL;
+  const lip = h * 0.18;
 
-function ContentItems({
-  fillRef,
-  phaseRef,
-}: {
-  fillRef: MutableRefObject<number>;
-  phaseRef: MutableRefObject<Phase>;
-}) {
+  return (
+    <group>
+      <mesh position={[0, -h / 2 + FLOOR_T / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[w, FLOOR_T, d]} />
+        <Cardboard color={outer} />
+      </mesh>
+      <mesh position={[0, -h / 2 + FLOOR_T + 0.001, 0]} receiveShadow>
+        <boxGeometry args={[w - t * 2, 0.002, d - t * 2]} />
+        <meshStandardMaterial color={inner} roughness={0.96} />
+      </mesh>
+
+      <mesh position={[0, 0, -d / 2 + t / 2]} castShadow receiveShadow>
+        <boxGeometry args={[w, h, t]} />
+        <Cardboard color={outer} />
+      </mesh>
+      <mesh position={[0, FLOOR_T / 2, -d / 2 + t + 0.001]}>
+        <boxGeometry args={[w - t * 2, h - FLOOR_T, 0.002]} />
+        <meshStandardMaterial color={inner} roughness={0.96} />
+      </mesh>
+
+      <mesh position={[-w / 2 + t / 2, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[t, h, d]} />
+        <Cardboard color={outer} />
+      </mesh>
+      <mesh position={[-w / 2 + t + 0.001, FLOOR_T / 2, 0]}>
+        <boxGeometry args={[0.002, h - FLOOR_T, d - t * 2]} />
+        <meshStandardMaterial color={inner} roughness={0.96} />
+      </mesh>
+
+      <mesh position={[w / 2 - t / 2, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[t, h, d]} />
+        <Cardboard color={outer} />
+      </mesh>
+      <mesh position={[w / 2 - t - 0.001, FLOOR_T / 2, 0]}>
+        <boxGeometry args={[0.002, h - FLOOR_T, d - t * 2]} />
+        <meshStandardMaterial color={inner} roughness={0.96} />
+      </mesh>
+
+      {/* Solo labio frontal — el interior se lee de frente */}
+      <mesh position={[0, -h / 2 + lip / 2, d / 2 - t / 2]} castShadow receiveShadow>
+        <boxGeometry args={[w, lip, t]} />
+        <Cardboard color={outer} />
+      </mesh>
+
+      {/* Luz interior suave para que se note el hueco */}
+      <pointLight position={[0, 0.05, 0.05]} intensity={0.45} color="#ffd7a8" distance={0.7} decay={2} />
+    </group>
+  );
+}
+
+/**
+ * Colocación: aparece arriba del slot → flota → cae con squash al aterrizar.
+ */
+function ContentItems({ shared }: { shared: MutableRefObject<AnimShared> }) {
   const refs = useRef<(Group | null)[]>([null, null, null]);
+  const mats = useRef<(MeshStandardMaterial | null)[]>([null, null, null]);
+  const lastCycle = useRef(-1);
+  const items = useRef(PALETTES[0]);
 
   useFrame(() => {
-    const fillU = fillRef.current;
-    const phase = phaseRef.current;
-    for (let i = 0; i < ITEMS.length; i++) {
+    const { fill: fillU, phase, cycle } = shared.current;
+    if (cycle !== lastCycle.current) {
+      lastCycle.current = cycle;
+      items.current = PALETTES[cycle % PALETTES.length];
+      for (let i = 0; i < 3; i++) {
+        const m = mats.current[i];
+        if (m) m.color.set(items.current[i].color);
+      }
+    }
+
+    const list = items.current;
+    for (let i = 0; i < 3; i++) {
       const g = refs.current[i];
       if (!g) continue;
-      const stagger = i * 0.12;
-      const local = THREE.MathUtils.clamp((fillU - stagger) / Math.max(0.45, 1 - stagger), 0, 1);
-      const drop = ease(local);
-      const bounce =
-        local > 0.72 ? Math.sin(((local - 0.72) / 0.28) * Math.PI) * 0.05 * (1 - local) : 0;
-      const startY = 0.52;
-      const endY = FLOOR_Y + ITEMS[i].size[1] / 2;
-      g.position.set(ITEMS[i].x, THREE.MathUtils.lerp(startY, endY, drop) + bounce, ITEMS[i].z);
-      g.rotation.y = (1 - drop) * 0.7 * (i % 2 === 0 ? 1 : -1);
-      const show = phase === "fill" || phase === "pack" || phase === "seal" || phase === "ship";
-      g.visible = show && (phase !== "fill" || local > 0.02);
+      const it = list[i];
+      const stagger = i * 0.26;
+      const local = THREE.MathUtils.clamp((fillU - stagger) / 0.48, 0, 1);
+
+      // 0–0.28 hover · 0.28–1 drop
+      let y: number;
+      let sx = 1;
+      let sy = 1;
+      let sz = 1;
+      let rotY = 0;
+      const hoverY = BOX_H / 2 + 0.28;
+      const endY = INNER_Y0 + it.size[1] / 2 + 0.003;
+
+      if (local < 0.28) {
+        const h = local / 0.28;
+        y = THREE.MathUtils.lerp(hoverY + 0.18, hoverY, ease(h));
+        rotY = (1 - h) * 0.8 * (i % 2 === 0 ? 1 : -1);
+      } else {
+        const d = (local - 0.28) / 0.72;
+        const drop = easeOutCubic(d);
+        const bounce = d > 0.85 ? Math.sin(((d - 0.85) / 0.15) * Math.PI) * 0.035 * (1 - d) : 0;
+        y = THREE.MathUtils.lerp(hoverY, endY, drop) + bounce;
+        rotY = (1 - drop) * 0.35 * (i % 2 === 0 ? 1 : -1);
+        // Squash al impacto
+        if (d > 0.82 && d < 0.95) {
+          const s = (d - 0.82) / 0.13;
+          sy = THREE.MathUtils.lerp(1, 0.72, Math.sin(s * Math.PI));
+          sx = sz = THREE.MathUtils.lerp(1, 1.18, Math.sin(s * Math.PI));
+        }
+      }
+
+      g.position.set(it.x, y, it.z);
+      g.rotation.set(0, rotY, (1 - local) * 0.12);
+      g.scale.set(it.size[0] * sx, it.size[1] * sy, it.size[2] * sz);
+
+      const show =
+        (phase === "fill" && local > 0.02) ||
+        phase === "pack" ||
+        phase === "seal" ||
+        phase === "ship";
+      g.visible = show;
     }
   });
 
   return (
     <group>
-      {ITEMS.map((it, i) => (
+      {[0, 1, 2].map((i) => (
         <group
           key={i}
           ref={(el) => {
             refs.current[i] = el;
           }}
+          visible={false}
         >
-          <RoundedBox args={[...it.size]} radius={0.018} castShadow>
-            <meshStandardMaterial color={it.color} roughness={0.55} metalness={0.08} />
+          <RoundedBox args={[1, 1, 1]} radius={0.11} castShadow>
+            <meshStandardMaterial
+              ref={(el) => {
+                mats.current[i] = el;
+              }}
+              color={PALETTES[0][i].color}
+              roughness={0.48}
+              metalness={0.12}
+            />
           </RoundedBox>
         </group>
       ))}
@@ -98,29 +252,68 @@ function ContentItems({
   );
 }
 
-function TapeProgress({ get }: { get: () => number }) {
-  const h = useRef<Mesh>(null);
-  const v = useRef<Mesh>(null);
+function TapeStrips({ get }: { get: () => number }) {
+  const strips = useRef<(Mesh | null)[]>([]);
+
   useFrame(() => {
     const p = get();
-    if (h.current) {
-      h.current.scale.set(THREE.MathUtils.lerp(0.02, 0.72, p), 1, 1);
-      h.current.visible = p > 0.02;
-    }
-    if (v.current) {
-      v.current.scale.set(1, THREE.MathUtils.lerp(0.02, 0.42, p), 1);
-      v.current.visible = p > 0.12;
+    const progresses = [
+      Math.min(1, p * 1.5),
+      Math.max(0, (p - 0.12) / 0.7),
+      Math.max(0, (p - 0.35) / 0.55),
+      Math.max(0, (p - 0.48) / 0.5),
+    ];
+    for (let i = 0; i < 4; i++) {
+      const m = strips.current[i];
+      if (!m) continue;
+      const t = ease(progresses[i]);
+      m.visible = t > 0.02;
+      if (i < 2) m.scale.set(THREE.MathUtils.lerp(0.02, 1, t), 1, 1);
+      else m.scale.set(1, THREE.MathUtils.lerp(0.02, 1, t), 1);
     }
   });
+
   return (
-    <group position={[0, 0.025, 0.275]}>
-      <mesh ref={h} position={[0, 0, 0.002]}>
-        <planeGeometry args={[1, 0.045]} />
-        <meshStandardMaterial color="#e8dcc8" roughness={0.45} />
+    <group>
+      <mesh
+        ref={(el) => {
+          strips.current[0] = el;
+        }}
+        position={[0, BOX_H / 2 + 0.03, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[BOX_W * 0.96, 0.048]} />
+        <meshStandardMaterial color="#e8dcc8" roughness={0.38} />
       </mesh>
-      <mesh ref={v} position={[0, 0, 0.003]} rotation={[0, 0, Math.PI / 2]}>
-        <planeGeometry args={[0.04, 1]} />
-        <meshStandardMaterial color="#e8dcc8" roughness={0.45} />
+      <mesh
+        ref={(el) => {
+          strips.current[1] = el;
+        }}
+        position={[0, BOX_H / 2 + 0.031, 0]}
+        rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+      >
+        <planeGeometry args={[BOX_D * 0.96, 0.042]} />
+        <meshStandardMaterial color="#e8dcc8" roughness={0.38} />
+      </mesh>
+      <mesh
+        ref={(el) => {
+          strips.current[2] = el;
+        }}
+        position={[BOX_W / 2 + 0.001, BOX_H / 2 - 0.04, 0]}
+        rotation={[0, Math.PI / 2, 0]}
+      >
+        <planeGeometry args={[0.042, BOX_H * 0.4]} />
+        <meshStandardMaterial color="#e8dcc8" roughness={0.38} />
+      </mesh>
+      <mesh
+        ref={(el) => {
+          strips.current[3] = el;
+        }}
+        position={[-BOX_W / 2 - 0.001, BOX_H / 2 - 0.04, 0]}
+        rotation={[0, -Math.PI / 2, 0]}
+      >
+        <planeGeometry args={[0.042, BOX_H * 0.4]} />
+        <meshStandardMaterial color="#e8dcc8" roughness={0.38} />
       </mesh>
     </group>
   );
@@ -128,33 +321,34 @@ function TapeProgress({ get }: { get: () => number }) {
 
 function SpeedStreaks({
   intensityRef,
-  phaseRef,
+  shared,
 }: {
   intensityRef: MutableRefObject<number>;
-  phaseRef: MutableRefObject<Phase>;
+  shared: MutableRefObject<AnimShared>;
 }) {
   const refs = useRef<(Mesh | null)[]>([]);
   useFrame(() => {
     const intensity = intensityRef.current;
-    const active = phaseRef.current === "ship" && intensity > 0.04;
-    for (let i = 0; i < 3; i++) {
+    const active = shared.current.phase === "ship" && intensity > 0.04;
+    for (let i = 0; i < 5; i++) {
       const m = refs.current[i];
       if (!m) continue;
       m.visible = active;
-      (m.material as THREE.MeshBasicMaterial).opacity = intensity * (0.4 - i * 0.1);
+      (m.material as THREE.MeshBasicMaterial).opacity = intensity * (0.5 - i * 0.07);
+      m.position.x = -0.08 - i * 0.07 - intensity * 0.05;
     }
   });
   return (
     <group position={[-0.55, 0, 0]}>
-      {[0.11, 0, -0.11].map((y, i) => (
+      {[0.16, 0.06, -0.02, -0.1, -0.18].map((y, i) => (
         <mesh
           key={i}
           ref={(el) => {
             refs.current[i] = el;
           }}
-          position={[-0.12 - i * 0.07, y, 0.01]}
+          position={[0, y, 0.03]}
         >
-          <planeGeometry args={[0.5 - i * 0.07, 0.022]} />
+          <planeGeometry args={[0.62 - i * 0.05, 0.016]} />
           <meshBasicMaterial
             color="#93c5fd"
             transparent
@@ -171,15 +365,15 @@ function SpeedStreaks({
 function PuffBurst({ kickRef }: { kickRef: MutableRefObject<number> }) {
   const refs = useRef<(Mesh | null)[]>([]);
   const born = useRef(-1);
-  const ages = useRef([0, 0, 0, 0, 0]);
+  const ages = useRef(Array.from({ length: 7 }, () => 0));
 
   useFrame((_, dt) => {
     const trigger = kickRef.current;
     if (trigger !== born.current && trigger > 0) {
       born.current = trigger;
-      ages.current = [0, 0, 0, 0, 0];
+      ages.current = ages.current.map(() => 0);
     }
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 7; i++) {
       const m = refs.current[i];
       if (!m) continue;
       if (born.current < 0) {
@@ -187,29 +381,29 @@ function PuffBurst({ kickRef }: { kickRef: MutableRefObject<number> }) {
         continue;
       }
       ages.current[i] += dt;
-      const delay = i * 0.028;
+      const delay = i * 0.022;
       const age = ages.current[i] - delay;
-      if (age < 0 || age > 0.42) {
+      if (age < 0 || age > 0.48) {
         m.visible = false;
         continue;
       }
       m.visible = true;
-      const t = age / 0.42;
-      const ang = (i / 5) * Math.PI * 2 + 0.35;
-      const dist = 0.12 + t * 0.5;
+      const t = age / 0.48;
+      const ang = (i / 7) * Math.PI * 2 + 0.5;
+      const dist = 0.08 + t * 0.62;
       m.position.set(
-        Math.cos(ang) * dist * 0.4 - 0.25,
-        0.04 + Math.sin(ang) * 0.1 + t * 0.12,
-        Math.sin(ang) * dist * 0.22,
+        Math.cos(ang) * dist * 0.38 - 0.3,
+        0.01 + Math.sin(ang) * 0.14 + t * 0.16,
+        Math.sin(ang) * dist * 0.28,
       );
-      m.scale.setScalar(0.035 + t * 0.16);
-      (m.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.5;
+      m.scale.setScalar(0.028 + t * 0.2);
+      (m.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.58;
     }
   });
 
   return (
     <group>
-      {Array.from({ length: 5 }).map((_, i) => (
+      {Array.from({ length: 7 }).map((_, i) => (
         <mesh
           key={i}
           ref={(el) => {
@@ -234,78 +428,117 @@ function PuffBurst({ kickRef }: { kickRef: MutableRefObject<number> }) {
 function PackBox({
   reduced,
   shipKickRef,
+  shared,
 }: {
   reduced: boolean;
   shipKickRef: MutableRefObject<number>;
+  shared: MutableRefObject<AnimShared>;
 }) {
   const root = useRef<Group>(null);
-  const lid = useRef<Group>(null);
+  const body = useRef<Group>(null);
+  const flapBack = useRef<Group>(null);
+  const flapFront = useRef<Group>(null);
   const label = useRef<Mesh>(null);
   const labelMat = useRef<MeshStandardMaterial>(null);
+  const barcode = useRef<Mesh>(null);
   const tapeRef = useRef(0);
-  const fillRef = useRef(0);
-  const phaseRef = useRef<Phase>("arrive");
   const streakRef = useRef(0);
   const kickRef = useRef(0);
 
   const state = useRef({
-    x: -1.55,
-    lidOpen: 1,
+    x: -1.85,
+    flapB: 1,
+    flapF: 1,
     tape: 0,
     label: 0,
-    y: 0.22,
+    y: BOX_H / 2 + 0.02,
+    yaw: 0,
     sx: 1,
     sy: 1,
+    sz: 1,
     fillU: 0,
     wasShip: false,
     shipKick: 0,
+    lastCycle: -1,
   });
 
   useFrame((clk, dt) => {
-    if (!root.current) return;
-    const { phase, u } = phaseAt(clk.clock.elapsedTime, reduced);
+    if (!root.current || !body.current) return;
+    const { phase, u, cycle } = phaseAt(clk.clock.elapsedTime, reduced);
     const s = state.current;
-    phaseRef.current = phase;
+
+    if (cycle !== s.lastCycle) {
+      s.lastCycle = cycle;
+      shared.current.spinDir = cycle % 2 === 0 ? 1 : -1;
+    }
+
+    const spinDir = shared.current.spinDir;
+    const baseY = BOX_H / 2 + 0.02;
 
     let targetX = 0;
-    let targetLid = 0;
+    let targetFlapB = 0;
+    let targetFlapF = 0;
     let targetTape = 0;
     let targetLabel = 0;
-    let targetY = 0.22;
+    let targetY = baseY;
+    let targetYaw = 0;
     let targetSx = 1;
     let targetSy = 1;
+    let targetSz = 1;
     let fillU = 0;
     let streak = 0;
+    let lockYaw = false;
 
     if (phase === "arrive") {
-      targetX = THREE.MathUtils.lerp(-1.55, 0, u);
-      targetLid = 1;
-      if (u < 0.08) {
-        s.x = -1.55;
-        s.lidOpen = 1;
+      targetX = THREE.MathUtils.lerp(-1.85, 0, u);
+      targetFlapB = 1;
+      targetFlapF = 1;
+      targetYaw = THREE.MathUtils.lerp(-0.4 * spinDir, 0.05, u);
+      // Soft land bounce
+      targetY = baseY + Math.sin(u * Math.PI) * 0.04 * (1 - u);
+      if (u < 0.05) {
+        s.x = -1.85;
+        s.flapB = 1;
+        s.flapF = 1;
         s.tape = 0;
         s.label = 0;
-        s.sx = 1;
-        s.sy = 1;
+        s.sx = s.sy = s.sz = 1;
+        s.yaw = -0.4 * spinDir;
         s.wasShip = false;
         s.fillU = 0;
+        lockYaw = true;
       }
     } else if (phase === "fill") {
       targetX = 0;
-      targetLid = 1;
+      targetFlapB = 1;
+      targetFlapF = 1;
+      // Ligero balanceo para ver el interior
+      targetYaw = 0.12 + Math.sin(u * Math.PI * 1.2) * 0.06;
       fillU = u;
     } else if (phase === "pack") {
       targetX = 0;
-      targetLid = Math.max(0, 1 - u);
       fillU = 1;
+      targetYaw = 0;
+      // Solapa trasera primero, frontal después (stagger en u)
+      targetFlapB = Math.max(0, 1 - easeBack(Math.min(1, u * 1.35)));
+      targetFlapF = Math.max(0, 1 - easeBack(Math.max(0, (u - 0.28) / 0.72)));
     } else if (phase === "seal") {
       targetX = 0;
-      targetLid = 0;
-      targetTape = Math.min(1, u * 1.3);
-      const lp = ease(Math.max(0, (u - 0.28) / 0.72));
-      targetLabel =
-        lp < 0.65 ? lp * (1.15 / 0.65) : THREE.MathUtils.lerp(1.15, 1, (lp - 0.65) / 0.35);
+      targetFlapB = 0;
+      targetFlapF = 0;
       fillU = 1;
+      // Giro directo (sin damp) — se ve el embalaje en 360°
+      lockYaw = true;
+      const spinU = ease(u);
+      targetYaw = spinDir * Math.PI * 2 * spinU;
+      s.yaw = targetYaw;
+      targetTape = Math.min(1, u * 1.35);
+      // Label solo al final, cuando vuelve a mirar a cámara
+      const lp = ease(Math.max(0, (u - 0.62) / 0.38));
+      targetLabel =
+        lp < 0.55 ? lp * (1.2 / 0.55) : THREE.MathUtils.lerp(1.2, 1, (lp - 0.55) / 0.45);
+      // Pequeño lift mientras gira
+      targetY = baseY + Math.sin(spinU * Math.PI) * 0.03;
     } else if (phase === "ship") {
       if (!s.wasShip) {
         s.wasShip = true;
@@ -313,95 +546,214 @@ function PackBox({
         shipKickRef.current = s.shipKick;
         kickRef.current = s.shipKick;
       }
-      const accel = Math.pow(THREE.MathUtils.clamp(u, 0, 1), 0.45);
-      targetX = THREE.MathUtils.lerp(0, 2.1, accel);
-      targetLid = 0;
+      targetFlapB = 0;
+      targetFlapF = 0;
       targetTape = 1;
       targetLabel = 1;
       fillU = 1;
-      if (u < 0.18) {
-        const t = u / 0.18;
-        targetSx = THREE.MathUtils.lerp(1, 1.22, t);
-        targetSy = THREE.MathUtils.lerp(1, 0.82, t);
-      } else if (u < 0.35) {
-        const t = (u - 0.18) / 0.17;
-        targetSx = THREE.MathUtils.lerp(1.22, 0.95, t);
-        targetSy = THREE.MathUtils.lerp(0.82, 1.08, t);
+      lockYaw = true;
+      targetYaw = spinDir * Math.PI * 2;
+      s.yaw = targetYaw;
+
+      // Anticipación → lanzamiento
+      if (u < 0.14) {
+        const t = u / 0.14;
+        targetX = THREE.MathUtils.lerp(0, -0.08, Math.sin(t * Math.PI));
+        targetSx = THREE.MathUtils.lerp(1, 1.32, t);
+        targetSy = THREE.MathUtils.lerp(1, 0.72, t);
+        targetSz = THREE.MathUtils.lerp(1, 0.9, t);
+        streak = t * 0.35;
+      } else {
+        const t = (u - 0.14) / 0.86;
+        const accel = Math.pow(t, 0.4);
+        targetX = THREE.MathUtils.lerp(-0.05, 2.55, accel);
+        if (t < 0.2) {
+          const r = t / 0.2;
+          targetSx = THREE.MathUtils.lerp(1.32, 0.9, r);
+          targetSy = THREE.MathUtils.lerp(0.72, 1.15, r);
+          targetSz = THREE.MathUtils.lerp(0.9, 1.05, r);
+        }
+        targetY = baseY + Math.sin(Math.min(t, 1) * Math.PI) * 0.09;
+        // Ligero tumble en pitch
+        if (body.current) {
+          body.current.rotation.z = THREE.MathUtils.damp(
+            body.current.rotation.z,
+            -t * 0.18 * spinDir,
+            8,
+            dt,
+          );
+        }
+        streak = t < 0.55 ? 1 - t * 0.4 : Math.max(0, 1.3 - t * 1.5);
       }
-      targetY = 0.22 + Math.sin(Math.min(u, 1) * Math.PI) * 0.05;
-      streak = u < 0.55 ? 1 - u / 0.55 : Math.max(0, 1.15 - u * 1.35);
     } else {
-      targetX = 2.25;
-      targetLid = 1;
+      targetX = 2.7;
+      targetFlapB = 1;
+      targetFlapF = 1;
       targetTape = 0;
       targetLabel = 0;
       fillU = 0;
       s.wasShip = false;
+      lockYaw = true;
+      targetYaw = spinDir * Math.PI * 2;
+      s.yaw = targetYaw;
+      if (body.current) body.current.rotation.z = 0;
     }
 
-    const k = phase === "ship" ? 14 : phase === "arrive" ? 9 : 11;
+    if (phase !== "ship" && body.current) {
+      body.current.rotation.z = THREE.MathUtils.damp(body.current.rotation.z, 0, 10, dt);
+    }
+
+    const k = phase === "ship" ? 16 : phase === "arrive" ? 8 : 11;
     s.x = THREE.MathUtils.damp(s.x, targetX, k, dt);
-    s.lidOpen = THREE.MathUtils.damp(s.lidOpen, targetLid, phase === "pack" ? 14 : 10, dt);
-    s.tape = THREE.MathUtils.damp(s.tape, targetTape, 12, dt);
-    s.label = THREE.MathUtils.damp(s.label, targetLabel, 14, dt);
-    s.y = THREE.MathUtils.damp(s.y, targetY, 10, dt);
-    s.sx = THREE.MathUtils.damp(s.sx, targetSx, 12, dt);
-    s.sy = THREE.MathUtils.damp(s.sy, targetSy, 12, dt);
-    s.fillU = THREE.MathUtils.damp(s.fillU, fillU, 10, dt);
-    streakRef.current = THREE.MathUtils.damp(streakRef.current, streak, 10, dt);
+    s.flapB = THREE.MathUtils.damp(s.flapB, targetFlapB, phase === "pack" ? 14 : 10, dt);
+    s.flapF = THREE.MathUtils.damp(s.flapF, targetFlapF, phase === "pack" ? 14 : 10, dt);
+    s.tape = THREE.MathUtils.damp(s.tape, targetTape, 14, dt);
+    s.label = THREE.MathUtils.damp(s.label, targetLabel, 16, dt);
+    s.y = THREE.MathUtils.damp(s.y, targetY, 11, dt);
+    s.sx = THREE.MathUtils.damp(s.sx, targetSx, 14, dt);
+    s.sy = THREE.MathUtils.damp(s.sy, targetSy, 14, dt);
+    s.sz = THREE.MathUtils.damp(s.sz, targetSz, 14, dt);
+    if (!lockYaw) s.yaw = THREE.MathUtils.damp(s.yaw, targetYaw, 7, dt);
+    s.fillU = THREE.MathUtils.damp(s.fillU, fillU, 8, dt);
+    streakRef.current = THREE.MathUtils.damp(streakRef.current, streak, 11, dt);
     tapeRef.current = s.tape;
-    fillRef.current = s.fillU;
+
+    shared.current.phase = phase;
+    shared.current.u = u;
+    shared.current.cycle = cycle;
+    shared.current.fill = s.fillU;
 
     root.current.position.set(s.x, s.y, 0);
-    root.current.scale.set(s.sx, s.sy, 1);
-    root.current.visible = !(phase === "gap" && u > 0.25);
+    root.current.scale.set(s.sx, s.sy, s.sz);
+    root.current.visible = !(phase === "gap" && u > 0.15);
+    body.current.rotation.y = s.yaw;
 
-    if (lid.current) lid.current.rotation.x = -s.lidOpen * 1.85;
+    if (flapBack.current) flapBack.current.rotation.x = -s.flapB * 2.05;
+    if (flapFront.current) flapFront.current.rotation.x = s.flapF * 2.05;
+
     if (label.current) {
-      label.current.scale.setScalar(Math.max(0.05, Math.min(s.label, 1.2)));
+      label.current.scale.setScalar(Math.max(0.04, Math.min(s.label, 1.22)));
       label.current.visible = s.label > 0.04;
     }
+    if (barcode.current) barcode.current.visible = s.label > 0.5;
     if (labelMat.current) {
       labelMat.current.opacity = Math.min(1, s.label);
-      labelMat.current.emissiveIntensity = Math.min(1, s.label) * 0.4;
+      labelMat.current.emissiveIntensity = Math.min(1, s.label) * 0.6;
+    }
+  });
+
+  const flapGeo: [number, number, number] = [BOX_W - 0.01, 0.034, BOX_D / 2 - 0.01];
+
+  return (
+    <group ref={root} position={[-1.85, BOX_H / 2 + 0.02, 0]}>
+      <group ref={body}>
+        <HollowShell />
+        <ContentItems shared={shared} />
+
+        {/* Solapa trasera */}
+        <group ref={flapBack} position={[0, BOX_H / 2, -BOX_D / 2]}>
+          <RoundedBox args={flapGeo} radius={0.01} position={[0, 0.01, BOX_D / 4]} castShadow>
+            <Cardboard color="#d2b48c" />
+          </RoundedBox>
+        </group>
+        {/* Solapa frontal */}
+        <group ref={flapFront} position={[0, BOX_H / 2, BOX_D / 2]}>
+          <RoundedBox args={flapGeo} radius={0.01} position={[0, 0.01, -BOX_D / 4]} castShadow>
+            <Cardboard color="#d4b896" />
+          </RoundedBox>
+        </group>
+
+        <TapeStrips get={() => tapeRef.current} />
+
+        <mesh ref={label} position={[0.1, 0.04, BOX_D / 2 + 0.003]}>
+          <planeGeometry args={[0.24, 0.14]} />
+          <meshStandardMaterial
+            ref={labelMat}
+            color="#f8fafc"
+            emissive="#3b82f6"
+            emissiveIntensity={0}
+            transparent
+            opacity={0}
+            roughness={0.3}
+          />
+        </mesh>
+        <mesh ref={barcode} position={[0.1, -0.015, BOX_D / 2 + 0.004]} visible={false}>
+          <planeGeometry args={[0.16, 0.035]} />
+          <meshBasicMaterial color="#0f172a" transparent opacity={0.65} />
+        </mesh>
+      </group>
+
+      <SpeedStreaks intensityRef={streakRef} shared={shared} />
+      <PuffBurst kickRef={kickRef} />
+    </group>
+  );
+}
+
+function WarehouseBackdrop({ shared }: { shared: MutableRefObject<AnimShared> }) {
+  const lamp = useRef<THREE.PointLight>(null);
+  const wallMat = useRef<MeshStandardMaterial>(null);
+
+  useFrame((state) => {
+    const cycle = shared.current.cycle;
+    const hueShift = (cycle % 3) * 0.045;
+    if (lamp.current) {
+      lamp.current.intensity = 0.3 + Math.sin(state.clock.elapsedTime * 1.1) * 0.05;
+      lamp.current.color.setHSL(0.09 + hueShift, 0.42, 0.66);
+    }
+    if (wallMat.current) {
+      wallMat.current.color.setHSL(0.58 + hueShift * 0.4, 0.22, 0.11 + (cycle % 3) * 0.012);
     }
   });
 
   return (
-    <group ref={root} position={[-1.55, 0.22, 0]}>
-      <group>
-        <RoundedBox args={[0.78, 0.4, 0.55]} radius={0.02} smoothness={4} castShadow receiveShadow>
-          <meshStandardMaterial color="#c9966c" roughness={0.78} />
-        </RoundedBox>
-        <mesh position={[0, 0.05, 0]}>
-          <boxGeometry args={[0.7, 0.28, 0.48]} />
-          <meshStandardMaterial color="#5c4030" roughness={0.95} />
-        </mesh>
-        <ContentItems fillRef={fillRef} phaseRef={phaseRef} />
-      </group>
-
-      <group ref={lid} position={[0, 0.2, -0.275]}>
-        <RoundedBox args={[0.78, 0.04, 0.55]} radius={0.015} position={[0, 0, 0.275]} castShadow>
-          <meshStandardMaterial color="#d2b48c" roughness={0.75} />
-        </RoundedBox>
-        <TapeProgress get={() => tapeRef.current} />
-      </group>
-
-      <mesh ref={label} position={[0.18, 0.02, 0.281]}>
-        <planeGeometry args={[0.2, 0.12]} />
-        <meshStandardMaterial
-          ref={labelMat}
-          color="#f8fafc"
-          emissive="#3b82f6"
-          emissiveIntensity={0}
-          transparent
-          opacity={0}
-          roughness={0.35}
-        />
+    <group>
+      <mesh position={[0, 1.5, -2.5]} receiveShadow>
+        <planeGeometry args={[14, 4.2]} />
+        <meshStandardMaterial ref={wallMat} color="#132233" roughness={0.96} />
       </mesh>
-
-      <SpeedStreaks intensityRef={streakRef} phaseRef={phaseRef} />
-      <PuffBurst kickRef={kickRef} />
+      {[-2.4, -0.7, 1, 2.7].map((x, i) => (
+        <mesh key={i} position={[x, 1.15, -2.45]}>
+          <planeGeometry args={[0.035, 2.4]} />
+          <meshStandardMaterial color="#1c3550" roughness={0.9} />
+        </mesh>
+      ))}
+      {[-3, 3.1].map((x, i) => (
+        <group key={i} position={[x, 0.95, -1.85]}>
+          {[0, 0.55, 1.1].map((y, j) => (
+            <mesh key={j} position={[0, y, 0]}>
+              <boxGeometry args={[1.5, 0.04, 0.52]} />
+              <meshStandardMaterial color="#243447" roughness={0.85} metalness={0.22} />
+            </mesh>
+          ))}
+          <mesh position={[-0.7, 0.55, 0]}>
+            <boxGeometry args={[0.06, 1.45, 0.52]} />
+            <meshStandardMaterial color="#1c2b3c" roughness={0.85} metalness={0.25} />
+          </mesh>
+          <mesh position={[0.7, 0.55, 0]}>
+            <boxGeometry args={[0.06, 1.45, 0.52]} />
+            <meshStandardMaterial color="#1c2b3c" roughness={0.85} metalness={0.25} />
+          </mesh>
+          <RoundedBox args={[0.36, 0.28, 0.3]} position={[-0.2, 0.2, 0.05]} radius={0.015}>
+            <meshStandardMaterial color={i === 0 ? "#6b4f3a" : "#5a6b7a"} roughness={0.9} />
+          </RoundedBox>
+          <RoundedBox args={[0.28, 0.22, 0.26]} position={[0.35, 0.72, 0]} radius={0.015}>
+            <meshStandardMaterial color="#7a5c42" roughness={0.9} />
+          </RoundedBox>
+        </group>
+      ))}
+      <mesh position={[1.2, 0.02, 0.05]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[2.4, 0.58]} />
+        <meshStandardMaterial color="#16263c" roughness={0.88} metalness={0.08} />
+      </mesh>
+      <mesh position={[1.2, 0.025, 0.3]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[2.4, 0.028]} />
+        <meshStandardMaterial color="#2563eb" emissive="#1d4ed8" emissiveIntensity={0.4} />
+      </mesh>
+      <mesh position={[1.2, 0.025, -0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[2.4, 0.028]} />
+        <meshStandardMaterial color="#2563eb" emissive="#1d4ed8" emissiveIntensity={0.4} />
+      </mesh>
+      <pointLight ref={lamp} position={[0, 2.3, 0.5]} intensity={0.32} color="#fde68a" distance={7} />
     </group>
   );
 }
@@ -409,17 +761,13 @@ function PackBox({
 function Station() {
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]} receiveShadow>
-        <circleGeometry args={[0.55, 48]} />
-        <meshStandardMaterial color="#1a3048" roughness={0.9} metalness={0.05} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]} receiveShadow>
+        <circleGeometry args={[0.66, 48]} />
+        <meshStandardMaterial color="#1a3048" roughness={0.88} metalness={0.06} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-        <ringGeometry args={[0.52, 0.55, 48]} />
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.35} />
-      </mesh>
-      <mesh position={[0.95, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[1.1, 0.04]} />
-        <meshStandardMaterial color="#2563eb" emissive="#1d4ed8" emissiveIntensity={0.25} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+        <ringGeometry args={[0.61, 0.66, 48]} />
+        <meshBasicMaterial color="#3b82f6" transparent opacity={0.42} />
       </mesh>
     </group>
   );
@@ -428,8 +776,8 @@ function Station() {
 function Floor() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-      <planeGeometry args={[10, 8]} />
-      <meshStandardMaterial color="#0f1c2e" roughness={0.98} />
+      <planeGeometry args={[14, 10]} />
+      <meshStandardMaterial color="#0a1420" roughness={0.98} />
     </mesh>
   );
 }
@@ -438,45 +786,64 @@ function CameraSoft({
   compact,
   reduced,
   shipKickRef,
+  shared,
 }: {
   compact: boolean;
   reduced: boolean;
   shipKickRef: MutableRefObject<number>;
+  shared: MutableRefObject<AnimShared>;
 }) {
   const { camera } = useThree();
-  const look = useMemo(() => new THREE.Vector3(0.15, 0.25, 0), []);
+  const look = useMemo(() => new THREE.Vector3(0.08, 0.3, 0), []);
   const lastKick = useRef(0);
   const punch = useRef(0);
+  const pos = useRef({ x: compact ? 1.5 : 1.35, y: compact ? 1.35 : 1.25, z: compact ? 2.4 : 2.15 });
 
   useFrame((state, dt) => {
-    const bx = compact ? 1.6 : 1.45;
-    const by = compact ? 1.15 : 1.05;
-    const bz = compact ? 2.2 : 1.95;
+    const { phase, u, cycle } = shared.current;
+    const side = cycle % 2 === 0 ? 1 : -0.2;
+    const heightBias = (cycle % 3) * 0.05;
+
+    // Cámara por fase: más alta en fill para ver el interior
+    let bx = (compact ? 1.5 : 1.35) * (0.94 + side * 0.07);
+    let by = (compact ? 1.35 : 1.22) + heightBias;
+    let bz = compact ? 2.4 : 2.15;
+    look.set(0.06 + (cycle % 3) * 0.02, 0.28 + heightBias * 0.25, 0);
+
+    if (phase === "fill") {
+      by += 0.22;
+      bz -= 0.18;
+      look.y = 0.12;
+      look.z = 0.05;
+    } else if (phase === "pack") {
+      by += 0.1;
+      look.y = 0.22;
+    } else if (phase === "seal") {
+      bz += 0.12;
+      by += 0.05;
+    } else if (phase === "ship") {
+      bx += u * 0.15;
+      look.x += u * 0.35;
+    }
+
     if (shipKickRef.current !== lastKick.current) {
       lastKick.current = shipKickRef.current;
       punch.current = 1;
     }
-    punch.current = THREE.MathUtils.damp(punch.current, 0, 5, dt);
+    punch.current = THREE.MathUtils.damp(punch.current, 0, 5.5, dt);
+    bz += punch.current * 0.14;
 
     if (reduced) {
       camera.position.set(bx, by, bz);
       camera.lookAt(look);
       return;
     }
+
     const t = state.clock.elapsedTime;
-    camera.position.x = THREE.MathUtils.damp(
-      camera.position.x,
-      bx + Math.sin(t * 0.15) * 0.04,
-      1.5,
-      dt,
-    );
-    camera.position.y = THREE.MathUtils.damp(
-      camera.position.y,
-      by + Math.sin(t * 0.2) * 0.02,
-      1.5,
-      dt,
-    );
-    camera.position.z = THREE.MathUtils.damp(camera.position.z, bz + punch.current * 0.1, 2.2, dt);
+    pos.current.x = THREE.MathUtils.damp(pos.current.x, bx + Math.sin(t * 0.11) * 0.04, 2.2, dt);
+    pos.current.y = THREE.MathUtils.damp(pos.current.y, by + Math.sin(t * 0.16) * 0.02, 2.2, dt);
+    pos.current.z = THREE.MathUtils.damp(pos.current.z, bz, 2.4, dt);
+    camera.position.set(pos.current.x, pos.current.y, pos.current.z);
     camera.lookAt(look);
   });
   return null;
@@ -484,33 +851,41 @@ function CameraSoft({
 
 function Scene({ compact, reduced }: { compact: boolean; reduced: boolean }) {
   const shipKick = useRef(0);
+  const shared = useRef<AnimShared>({
+    phase: "arrive",
+    u: 0,
+    cycle: 0,
+    fill: 0,
+    spinDir: 1,
+  });
 
   return (
     <>
       <RenderTune />
-      <SoftShadows size={12} samples={8} focus={0.85} />
-      <color attach="background" args={["#0b1a2e"]} />
-      <fog attach="fog" args={["#0b1a2e", 6, 14]} />
+      <SoftShadows size={14} samples={8} focus={0.8} />
+      <color attach="background" args={["#09131f"]} />
+      <fog attach="fog" args={["#09131f", 5.2, 12.5]} />
 
-      <ambientLight intensity={0.55} />
-      <hemisphereLight args={["#dbeafe", "#0f172a", 0.35]} />
+      <ambientLight intensity={0.45} />
+      <hemisphereLight args={["#cfe4ff", "#081018", 0.42]} />
       <directionalLight
-        position={[2.5, 4, 2]}
+        position={[2.6, 4.4, 2.4]}
         intensity={1.4}
         castShadow
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0002}
       />
-      <pointLight position={[0, 1.5, 0.8]} intensity={0.35} color="#fde68a" />
+      <pointLight position={[-0.3, 1.7, 1]} intensity={0.42} color="#fff7ed" />
 
-      <Environment preset="warehouse" environmentIntensity={0.18} />
+      <Environment preset="warehouse" environmentIntensity={0.24} />
 
       <Floor />
+      <WarehouseBackdrop shared={shared} />
       <Station />
-      <PackBox reduced={reduced} shipKickRef={shipKick} />
+      <PackBox reduced={reduced} shipKickRef={shipKick} shared={shared} />
 
-      <ContactShadows position={[0, 0.005, 0]} opacity={0.45} scale={6} blur={2.4} far={3} />
-      <CameraSoft compact={compact} reduced={reduced} shipKickRef={shipKick} />
+      <ContactShadows position={[0, 0.004, 0]} opacity={0.52} scale={7} blur={2.5} far={3.5} />
+      <CameraSoft compact={compact} reduced={reduced} shipKickRef={shipKick} shared={shared} />
     </>
   );
 }
@@ -527,18 +902,18 @@ export function OutboundScene({ compact = false }: { compact?: boolean }) {
     <div
       className={
         compact
-          ? "relative h-full min-h-[9rem] w-full bg-[#0b1a2e]"
-          : "absolute inset-0 bg-[#0b1a2e]"
+          ? "relative h-full min-h-[9rem] w-full bg-[#09131f]"
+          : "absolute inset-0 bg-[#09131f]"
       }
     >
       <Canvas
         shadows
         dpr={[1, 1.75]}
         camera={{
-          position: compact ? [1.6, 1.15, 2.2] : [1.45, 1.05, 1.95],
-          fov: compact ? 42 : 36,
+          position: compact ? [1.5, 1.35, 2.4] : [1.35, 1.25, 2.15],
+          fov: compact ? 38 : 33,
           near: 0.1,
-          far: 25,
+          far: 28,
         }}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
         style={{ width: "100%", height: "100%", display: "block" }}
