@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.5 — 2026-10-09
+
+### Login — escena 3D + alta simplificada
+- Panel izquierdo con **React Three Fiber** (pasillo, estanterías, cajas, haz de scan); SVG CSS retirado.
+- Título **ClarivEye Lite** fijo arriba (desktop y móvil).
+- Crear cuenta en **2 pasos** (datos negocio+tú → contraseña ×2), menos “entrevista”.
+
 ## 0.3.4 — 2026-10-09
 
 ### Login v2 — “muelle de salida”

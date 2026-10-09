@@ -1,17 +1,21 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, ArrowRight, Building2, Lock, Mail, User } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthField } from "@/components/AuthField";
 import { ClarivBox } from "@/components/ClarivBox";
-import { OutboundArt } from "@/components/OutboundArt";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, ErrorNote } from "@/components/ui";
 import { hasAnyAccount } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
 
-const REGISTER_STEPS = ["Negocio", "Tú", "Contraseña"] as const;
+/** Lazy: three.js no bloquea el primer paint del form */
+const OutboundArt = lazy(() =>
+  import("@/components/OutboundArt").then((m) => ({ default: m.OutboundArt })),
+);
+
+const REGISTER_STEPS = ["Tus datos", "Contraseña"] as const;
 
 export function LoginPage() {
   const reduce = useReducedMotion();
@@ -19,6 +23,7 @@ export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">(() =>
     hasAnyAccount() ? "login" : "register",
   );
+  /** 1 = negocio+nombre+email · 2 = contraseñas */
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
@@ -55,25 +60,19 @@ export function LoginPage() {
 
   function nextRegister() {
     setError("");
-    if (step === 1) {
-      if (businessName.trim().length < 2) {
-        setError("Pon el nombre de tu negocio");
-        return;
-      }
-      setStep(2);
+    if (businessName.trim().length < 2) {
+      setError("Pon el nombre de tu negocio");
       return;
     }
-    if (step === 2) {
-      if (name.trim().length < 2) {
-        setError("¿Cómo te llamas?");
-        return;
-      }
-      if (!email.includes("@")) {
-        setError("Email no válido");
-        return;
-      }
-      setStep(3);
+    if (name.trim().length < 2) {
+      setError("¿Cómo te llamas?");
+      return;
     }
+    if (!email.includes("@")) {
+      setError("Email no válido");
+      return;
+    }
+    setStep(2);
   }
 
   function onRegister(event: React.FormEvent) {
@@ -97,71 +96,65 @@ export function LoginPage() {
   const ctaClass =
     "h-[52px] w-full gap-2 rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 active:scale-[0.98] hover:shadow-[0_0_0_3px_hsl(28_90%_48%/0.25)]";
 
+  const brandBar = (
+    <div className="flex items-center gap-3">
+      <ClarivBox size={34} className="brightness-125" />
+      <span className="font-display text-xl font-semibold tracking-tight text-white">
+        ClarivEye Lite
+      </span>
+    </div>
+  );
+
   return (
     <div data-login className="min-h-dvh bg-[hsl(var(--login-surface))] text-[hsl(var(--login-ink))]">
       <div className="grid min-h-dvh lg:grid-cols-2">
-        {/* —— Marca full-bleed —— */}
-        <aside className="relative hidden min-h-dvh flex-col text-white lg:flex">
-          <OutboundArt className="absolute inset-0" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[hsl(221_55%_12%/0.85)] via-[hsl(221_55%_18%/0.35)] to-transparent" />
+        {/* Panel marca + 3D */}
+        <aside className="relative hidden min-h-dvh flex-col lg:flex">
+          <Suspense
+            fallback={<div className="absolute inset-0 bg-[#10253f]" />}
+          >
+            <OutboundArt className="absolute inset-0" />
+          </Suspense>
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0a1628]/90 via-transparent to-[#0a1628]/55" />
 
-          <div className="relative z-10 flex h-full flex-col justify-between p-10 xl:p-12">
-            <div className="flex items-center gap-3">
-              <ClarivBox size={36} className="brightness-125" />
-              <span className="font-display text-xl font-semibold tracking-tight">ClarivEye Lite</span>
-            </div>
+          {/* Título SIEMPRE arriba */}
+          <div className="relative z-10 p-8 xl:p-10">{brandBar}</div>
 
-            <div className="max-w-md space-y-3 pb-4">
-              <motion.h2
-                className="font-display text-[2.65rem] font-semibold leading-[1.12] tracking-tight"
-                initial={reduce ? false : { opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35 }}
-              >
-                ClarivEye Lite
-              </motion.h2>
-              <motion.p
-                className="text-base leading-relaxed text-white/80"
-                initial={reduce ? false : { opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: 0.06 }}
-              >
-                Del albarán al picking — un solo gesto.
-              </motion.p>
-            </div>
+          <div className="relative z-10 mt-auto max-w-md space-y-2 p-8 xl:p-10">
+            <p className="font-display text-2xl font-semibold leading-snug text-white/95">
+              Del albarán al picking — un solo gesto.
+            </p>
           </div>
         </aside>
 
-        {/* —— Formulario (mostrador) —— */}
         <main className="flex flex-col">
-          {/* Hero móvil */}
-          <div className="relative lg:hidden">
-            <OutboundArt compact className="h-44 w-full" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[hsl(var(--login-surface))] via-[hsl(var(--login-surface)/0.35)] to-transparent" />
-            <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-5 pb-4">
-              <ClarivBox size={40} />
-              <div>
-                <p className="font-display text-xl font-semibold leading-none text-[hsl(var(--login-ink))]">
-                  ClarivEye Lite
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">Del albarán al picking</p>
-              </div>
+          {/* Móvil: título arriba + escena compacta */}
+          <div className="lg:hidden">
+            <div className="flex items-center gap-3 bg-[#10253f] px-5 py-4">
+              <ClarivBox size={32} className="brightness-125" />
+              <span className="font-display text-lg font-semibold text-white">ClarivEye Lite</span>
+            </div>
+            <div className="relative h-36">
+              <Suspense fallback={<div className="h-full w-full bg-[#10253f]" />}>
+                <OutboundArt compact className="h-full w-full" />
+              </Suspense>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[hsl(var(--login-surface))] to-transparent" />
             </div>
           </div>
 
           <div className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-10">
-            <div className="mx-auto w-full max-w-[400px] space-y-7">
+            <div className="mx-auto w-full max-w-[400px] space-y-6">
               <header className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
                   {mode === "login" ? "Acceso" : "Alta"}
                 </p>
-                <h1 className="font-display text-[1.85rem] font-semibold tracking-tight">
+                <h1 className="font-display text-[1.75rem] font-semibold tracking-tight">
                   {mode === "login" ? "Entra a tu almacén" : "Crea tu negocio"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {mode === "login"
                     ? "Email y contraseña del negocio."
-                    : "Tres pasos. Un negocio, sus pedidos."}
+                    : "Datos del negocio y una contraseña. Listo."}
                 </p>
               </header>
 
@@ -229,7 +222,7 @@ export function LoginPage() {
                   </motion.form>
                 ) : (
                   <motion.div key={`reg-${step}`} {...fade} className="space-y-4">
-                    <StepProgress step={step} total={3} labels={[...REGISTER_STEPS]} />
+                    <StepProgress step={step} total={2} labels={[...REGISTER_STEPS]} />
 
                     {step === 1 ? (
                       <form
@@ -237,13 +230,10 @@ export function LoginPage() {
                           e.preventDefault();
                           nextRegister();
                         }}
-                        className="space-y-4"
+                        className="space-y-3.5"
                       >
-                        <p className="text-sm text-muted-foreground">
-                          ¿Cómo se llama tu empresa o almacén?
-                        </p>
                         <AuthField
-                          label="Nombre del negocio"
+                          label="Negocio"
                           icon={Building2}
                           value={businessName}
                           onChange={(e) => setBusinessName(e.target.value)}
@@ -251,33 +241,12 @@ export function LoginPage() {
                           autoFocus
                           required
                         />
-                        <ErrorNote message={error} />
-                        <Button type="submit" className={ctaClass}>
-                          Continuar
-                          <ArrowRight size={17} />
-                        </Button>
-                      </form>
-                    ) : null}
-
-                    {step === 2 ? (
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          nextRegister();
-                        }}
-                        className="space-y-4"
-                      >
-                        <p className="text-sm text-muted-foreground">
-                          Tú serás el dueño de{" "}
-                          <span className="font-semibold text-foreground">{businessName}</span>.
-                        </p>
                         <AuthField
                           label="Tu nombre"
                           icon={User}
                           value={name}
                           onChange={(e) => setName(e.target.value)}
                           placeholder="Ana"
-                          autoFocus
                           required
                         />
                         <AuthField
@@ -291,28 +260,16 @@ export function LoginPage() {
                           required
                         />
                         <ErrorNote message={error} />
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="h-[52px] gap-1.5 rounded-xl"
-                            onClick={() => setStep(1)}
-                          >
-                            <ArrowLeft size={16} />
-                            Atrás
-                          </Button>
-                          <Button type="submit" className={cn(ctaClass, "w-auto")}>
-                            Continuar
-                            <ArrowRight size={16} />
-                          </Button>
-                        </div>
+                        <Button type="submit" className={ctaClass}>
+                          Continuar
+                          <ArrowRight size={17} />
+                        </Button>
                       </form>
-                    ) : null}
-
-                    {step === 3 ? (
-                      <form onSubmit={onRegister} className="space-y-4">
+                    ) : (
+                      <form onSubmit={onRegister} className="space-y-3.5">
                         <p className="text-sm text-muted-foreground">
-                          Elige una contraseña y confírmala.
+                          Contraseña para{" "}
+                          <span className="font-semibold text-foreground">{businessName}</span>
                         </p>
                         <AuthField
                           label="Contraseña"
@@ -346,7 +303,7 @@ export function LoginPage() {
                             type="button"
                             variant="ghost"
                             className="h-[52px] gap-1.5 rounded-xl"
-                            onClick={() => setStep(2)}
+                            onClick={() => setStep(1)}
                           >
                             <ArrowLeft size={16} />
                             Atrás
@@ -360,7 +317,7 @@ export function LoginPage() {
                           </Button>
                         </div>
                       </form>
-                    ) : null}
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
