@@ -110,7 +110,7 @@ export function detectProfile(text: string): DocumentProfile {
   }
   if (/orden\s+de\s+compra|\bOC\s*\d|art[ií]culo\s*#/i.test(t)) return "oc_tabla";
   if (/base\s*ud|concepto/i.test(t) && /albar[aá]n/i.test(t)) return "fashion_sku";
-  if (/albar[aá]n/i.test(t)) return "tosma_cod";
+  // No forzar Tosma solo por “albarán”: parseAnyDocument compite entre perfiles.
   return "generic";
 }
 
@@ -434,16 +434,15 @@ function extractTosma(text: string): DocumentLine[] {
   }
   if (out.length >= 2) return dedupe(out);
 
-  // 2) OCR roto: zip códigos + filas numéricas
+  // 2) OCR roto: zip códigos + filas numéricas (sin inventar nombres)
   const codes = extractTosmaArticleCodes(text);
   const { byCode, ordered } = extractTosmaNumericByCode(text);
-  const nameHints = ["Válvula", "Membrana", "Racor", "Aro cera", "Caldera"];
   for (let i = 0; i < codes.length; i++) {
     const n = byCode.get(codes[i]) ?? ordered[i];
     out.push(
       line(
         codes[i],
-        nameHints[i] ?? null,
+        nameNearArticleCode(text, codes[i]),
         n?.quantity ?? 1,
         n?.unitPrice ?? null,
         n ? 0.78 : 0.65,
@@ -451,6 +450,23 @@ function extractTosma(text: string): DocumentLine[] {
     );
   }
   return dedupe(out);
+}
+
+/** Descripción real tras el código; null si el OCR no la trae (mejor chip asistido). */
+function nameNearArticleCode(text: string, code: string): string | null {
+  const esc = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `(?:^|\\n)\\s*${esc}\\s+([A-Za-zÁÉÍÓÚÑáéíóúñ][^\\n]{2,70}?)(?=\\s+\\d+[.,]|\\s*$)`,
+    "im",
+  );
+  const m = text.match(re);
+  if (!m?.[1]) return null;
+  const name = m[1].replace(/\s+\d+[.,]\d{2}.*$/, "").trim();
+  if (name.length < 3) return null;
+  if (/peso\s*total|b\.\s*imponible|total\s*albar|forma\s*de\s*pago|cliente|madrid|firma/i.test(name)) {
+    return null;
+  }
+  return name;
 }
 
 function dedupe(lines: DocumentLine[]): DocumentLine[] {
@@ -482,11 +498,25 @@ export function extractByProfile(text: string, profile: DocumentProfile): Docume
   }
 }
 
+/** Score de calidad (no solo “más líneas”): castiga refs tipo qty sueltas. */
 function scoreLines(lines: DocumentLine[]): number {
-  return lines.reduce(
-    (sum, l) => sum + l.confidence + (l.name ? 0.3 : 0) + (l.quantity > 1 ? 0.1 : 0),
-    lines.length,
-  );
+  if (!lines.length) return -1;
+  let sum = 0;
+  let named = 0;
+  for (const l of lines) {
+    let s = l.confidence;
+    if (l.name) {
+      s += 0.45;
+      named += 1;
+    }
+    if (l.quantity > 1) s += 0.12;
+    if (l.unitPrice) s += 0.1;
+    if (l.reference.length >= 5 || /^(Item|SKU)/i.test(l.reference)) s += 0.25;
+    // "23"/"14" sin nombre suelen ser qty mal leídas como SKU
+    if (/^\d{1,3}$/.test(l.reference) && !l.name) s -= 1.25;
+    sum += s;
+  }
+  return sum + named * 0.55 + Math.min(lines.length, 10) * 0.25;
 }
 
 export type ProfileParseResult = DocumentParseResult & { profile: DocumentProfile };
@@ -501,19 +531,69 @@ export function parseWithProfile(rawText: string): ProfileParseResult {
   return { profile, documentNumber, documentType, lines, raw_text };
 }
 
+const ALL_PROFILES: DocumentProfile[] = [
+  "easywms",
+  "picking_list",
+  "fashion_sku",
+  "tosma_cod",
+  "oc_tabla",
+  "generic",
+];
+
 /**
- * Entrada principal: elige el mejor entre perfil y parser genérico.
+ * Entrada principal: compite todos los extractores + genérico y se queda con el mejor score.
+ * Así un albarán “raro” no queda atrapado en el perfil mal detectado.
  */
 export function parseAnyDocument(rawText: string): ProfileParseResult {
-  const profiled = parseWithProfile(rawText);
-  const generic = parseDocumentOCR(rawText);
-  const bestLines =
-    scoreLines(profiled.lines) >= scoreLines(generic.lines) ? profiled.lines : generic.lines;
-  return {
-    profile: profiled.profile,
-    documentNumber: profiled.documentNumber || generic.documentNumber,
-    documentType: profiled.documentType !== "desconocido" ? profiled.documentType : generic.documentType,
-    lines: bestLines,
-    raw_text: profiled.raw_text || generic.raw_text,
+  const raw_text = (rawText || "").replace(/\r\n/g, "\n").trim();
+  const documentType = detectType(raw_text);
+  const detected = detectProfile(raw_text);
+  const generic = parseDocumentOCR(raw_text);
+
+  let best: ProfileParseResult = {
+    profile: detected,
+    documentNumber: extractDocumentNumberForProfile(raw_text, detected) || generic.documentNumber,
+    documentType: documentType !== "desconocido" ? documentType : generic.documentType,
+    lines: [],
+    raw_text,
   };
+  let bestScore = -1;
+
+  for (const profile of ALL_PROFILES) {
+    const lines = extractByProfile(raw_text, profile);
+    const score = scoreLines(lines);
+    // Empate: preferir el perfil detectado
+    const tieBreak = profile === detected ? 0.05 : 0;
+    if (score + tieBreak > bestScore) {
+      bestScore = score + tieBreak;
+      best = {
+        profile,
+        documentNumber: extractDocumentNumberForProfile(raw_text, profile) || generic.documentNumber,
+        documentType: documentType !== "desconocido" ? documentType : generic.documentType,
+        lines,
+        raw_text,
+      };
+    }
+  }
+
+  const genScore = scoreLines(generic.lines);
+  if (genScore > bestScore) {
+    return {
+      profile: detected === "generic" ? "generic" : detected,
+      documentNumber: best.documentNumber || generic.documentNumber,
+      documentType: best.documentType !== "desconocido" ? best.documentType : generic.documentType,
+      lines: generic.lines,
+      raw_text: generic.raw_text || raw_text,
+    };
+  }
+
+  if (best.lines.length === 0 && generic.lines.length > 0) {
+    return {
+      ...best,
+      lines: generic.lines,
+      documentNumber: best.documentNumber || generic.documentNumber,
+    };
+  }
+
+  return best;
 }

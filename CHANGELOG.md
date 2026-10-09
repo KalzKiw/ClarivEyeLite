@@ -1,5 +1,13 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.18 — 2026-10-09
+
+### Parse — multi-formato más robusto
+- `parseAnyDocument` compite todos los perfiles + genérico (mejor score).
+- Tosma: sin nombres inventados; descripción solo si aparece junto al código.
+- Columnas: no cruzar SKU/desc/qty por índice si las longitudes no cuadran.
+- PackSpinner por defecto `sm` (carga); login sigue en `lg`.
+
 ## 0.3.17 — 2026-10-09
 
 ### PackSpinner — loop más fluido

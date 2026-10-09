@@ -446,7 +446,7 @@ const SIZE_CLASS = {
   lg: "h-52 w-52",
 } as const;
 
-export function PackSpinner({ className, size = "md", label }: PackSpinnerProps) {
+export function PackSpinner({ className, size = "sm", label }: PackSpinnerProps) {
   const reduced = useMemo(
     () =>
       typeof window !== "undefined" &&
@@ -484,7 +484,7 @@ export function PackSpinner({ className, size = "md", label }: PackSpinnerProps)
 export function LoadingMark({
   className,
   label = "Cargando…",
-  size = "md",
+  size = "sm",
   fill = false,
 }: {
   className?: string;

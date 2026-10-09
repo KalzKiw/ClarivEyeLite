@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectProfile, parseWithProfile } from "./document-profiles";
+import { detectProfile, parseAnyDocument, parseWithProfile } from "./document-profiles";
 import {
   FIXTURE_EASYWMS,
   FIXTURE_EASYWMS_PICKING,
@@ -80,6 +80,19 @@ describe("document profiles", () => {
     expect(doc.lines.find((l) => l.reference === "77")?.quantity).toBe(12);
     expect(doc.lines.find((l) => l.reference === "000107")?.quantity).toBe(21);
     expect(doc.lines.find((l) => l.reference === "97")?.quantity).toBe(3);
+    // No inventar “Válvula/Membrana…” si el OCR no trae descripción
+    expect(doc.lines.every((l) => !/Válvula|Membrana|Racor|Caldera/i.test(l.name ?? ""))).toBe(true);
+  });
+
+  it("parseAnyDocument elige el mejor extractor aunque detectProfile falle", () => {
+    const easy = parseAnyDocument(FIXTURE_EASYWMS);
+    expect(easy.lines.map((l) => l.reference)).toEqual(["086872", "011134", "000357"]);
+    const fashion = parseAnyDocument(FIXTURE_FASHION);
+    expect(fashion.lines).toHaveLength(5);
+    const tosma = parseAnyDocument(FIXTURE_TOSMA);
+    expect(tosma.lines.map((l) => l.reference)).toEqual(
+      expect.arrayContaining(["000113", "000107", "97"]),
+    );
   });
 
   it("oc_tabla sigue funcionando vía parseDocumentOCR", () => {

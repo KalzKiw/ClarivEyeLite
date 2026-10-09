@@ -180,26 +180,31 @@ export function parseColumnBundle(bundle: ColumnOcrBundle): DocumentParseResult 
   const nums = extractQtyPriceLines(bundle.numsText);
 
   let lines: DocumentLine[] = [];
-  const count = skus.length || descs.length;
+  // Filas ancladas a SKU cuando hay refs; no cruzar columnas por índice si longitudes no cuadran
+  const count = skus.length > 0 ? skus.length : descs.length;
+  const descAligned = skus.length > 0 && descs.length === skus.length;
+  const numsAligned =
+    (skus.length > 0 && nums.length === skus.length) ||
+    (skus.length === 0 && nums.length === descs.length);
 
   for (let i = 0; i < count; i++) {
     const reference = skus[i] || `PROD-${i + 1}`;
-    // Preferir columna descripción (ya expandida); fullText solo si falta
-    const name = descs[i] || nearNames[i] || null;
-    const qp = nums[i];
+    const name = descAligned
+      ? descs[i]
+      : nearNames[i] || (skus.length === 0 ? descs[i] ?? null : null);
+    const qp = numsAligned ? nums[i] : undefined;
     lines.push({
       reference,
       name,
       quantity: qp?.quantity ?? 1,
-      // Sin bultos en el doc → 0 (no inventar 1)
       packages: 0,
       unitPrice: qp?.unitPrice ?? null,
       confidence: skus[i] && name ? 0.9 : skus[i] ? 0.75 : 0.5,
     });
   }
 
+  // Qty/precio desde texto completo cuando la columna nums no alineó
   lines = enrichFromFullText(lines, bundle.fullText || joined);
-
   if (lines.length > 0) {
     return {
       documentNumber: extractDocNumber(joined),
