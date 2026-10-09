@@ -12,8 +12,10 @@ import * as THREE from "three";
 
 const PERIOD = 7;
 const PALLET_Z = 0.4;
-const GUN_BASE = new THREE.Vector3(1.05, 0.95, 0.85);
+const GUN_BASE = new THREE.Vector3(1.15, 1.05, 0.95);
 const HALO_THICKNESS = 0.02;
+/** Profundidad del halo en cara frontal (no atraviesa el cartón). */
+const HALO_FACE_DEPTH = 0.035;
 
 /** Cartones del stack (posición local al group z=PALLET_Z). */
 const PALLET_CARTONS = [
@@ -72,6 +74,91 @@ function frontAim(i: number, sliceY: number) {
   return { x: c.x, y: sliceY, z: c.z + c.d / 2 };
 }
 
+/** Halo fino sobre la cara frontal (z = frente), no un plano que cruza el volumen. */
+function frontHalo(i: number, sliceY: number, wScale = 1.05) {
+  const c = worldCenter(i);
+  return {
+    x: c.x,
+    y: sliceY,
+    z: c.z + c.d / 2,
+    w: c.w * wScale,
+    d: HALO_FACE_DEPTH,
+  };
+}
+
+type Aabb = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
+
+function cartonAabb(i: number): Aabb {
+  const c = worldCenter(i);
+  // AABB axis-aligned (rotación leve de cartones ≈ ignorada a propósito)
+  const pad = 0.01;
+  return {
+    minX: c.x - c.w / 2 - pad,
+    maxX: c.x + c.w / 2 + pad,
+    minY: c.y - c.h / 2 - pad,
+    maxY: c.y + c.h / 2 + pad,
+    minZ: c.z - c.d / 2 - pad,
+    maxZ: c.z + c.d / 2 + pad,
+  };
+}
+
+/** Ray–AABB: distancia al primer hit o null. */
+function intersectRayAabb(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  box: Aabb,
+): number | null {
+  let tMin = 0;
+  let tMax = Infinity;
+
+  const axes: [number, number, number, number][] = [
+    [ox, dx, box.minX, box.maxX],
+    [oy, dy, box.minY, box.maxY],
+    [oz, dz, box.minZ, box.maxZ],
+  ];
+
+  for (const [o, d, minB, maxB] of axes) {
+    if (Math.abs(d) < 1e-8) {
+      if (o < minB || o > maxB) return null;
+      continue;
+    }
+    let t1 = (minB - o) / d;
+    let t2 = (maxB - o) / d;
+    if (t1 > t2) {
+      const tmp = t1;
+      t1 = t2;
+      t2 = tmp;
+    }
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return null;
+  }
+  if (tMax < 0) return null;
+  const t = tMin >= 0 ? tMin : tMax;
+  return t >= 0 ? t : null;
+}
+
+function firstCartonHit(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  maxDist: number,
+): number {
+  let best = maxDist;
+  for (let i = 0; i < N; i++) {
+    const t = intersectRayAabb(ox, oy, oz, dx, dy, dz, cartonAabb(i));
+    if (t != null && t > 0.02 && t < best) best = t;
+  }
+  return best;
+}
+
 /**
  * Timeline:
  * 0–0.08 aim caja0
@@ -87,7 +174,7 @@ function sampleTargets(elapsed: number, reduced: boolean) {
       activeIndex: 2,
       progress: 0.5,
       targetAim: frontAim(2, c2.y),
-      targetHalo: { x: c2.x, y: c2.y, z: c2.z, w: c2.w * 1.05, d: c2.d * 1.05 },
+      targetHalo: frontHalo(2, c2.y),
       targetHit: 0,
       targetLight: 0.35,
     };
@@ -104,7 +191,7 @@ function sampleTargets(elapsed: number, reduced: boolean) {
       activeIndex: 0,
       progress: phase / 0.08,
       targetAim: frontAim(0, y),
-      targetHalo: { x: c0.x, y, z: c0.z, w: c0.w * 1.05, d: c0.d * 1.05 },
+      targetHalo: frontHalo(0, y),
       targetHit: 0,
       targetLight: 0.25,
     };
@@ -118,24 +205,29 @@ function sampleTargets(elapsed: number, reduced: boolean) {
     const box = worldCenter(idx);
     const yBot = box.y - box.h / 2;
     const yTop = box.y + box.h / 2;
+    const prevIdx = Math.max(0, idx - 1);
+    const prev = worldCenter(prevIdx);
 
     // approach 0–0.22 | slice 0.22–0.78 | hit 0.78–1
     if (u < 0.22) {
       const t = smootherstep(u / 0.22);
-      const prev = worldCenter(Math.max(0, idx - 1));
       const fromY = idx === 0 ? yBot : prev.y;
       const y = THREE.MathUtils.lerp(fromY, yBot, t);
-      const w = THREE.MathUtils.lerp(idx === 0 ? box.w : prev.w, box.w, t) * 1.05;
-      const d = THREE.MathUtils.lerp(idx === 0 ? box.d : prev.d, box.d, t) * 1.05;
-      const x = THREE.MathUtils.lerp(idx === 0 ? box.x : prev.x, box.x, t);
-      const z = THREE.MathUtils.lerp(idx === 0 ? box.z : prev.z, box.z, t);
+      const fromHalo = frontHalo(prevIdx, fromY);
+      const toHalo = frontHalo(idx, yBot);
       return {
         phase,
         segment: "approach" as const,
         activeIndex: idx,
         progress: u,
         targetAim: frontAim(idx, y),
-        targetHalo: { x, y, z, w, d },
+        targetHalo: {
+          x: THREE.MathUtils.lerp(fromHalo.x, toHalo.x, t),
+          y,
+          z: THREE.MathUtils.lerp(fromHalo.z, toHalo.z, t),
+          w: THREE.MathUtils.lerp(fromHalo.w, toHalo.w, t),
+          d: HALO_FACE_DEPTH,
+        },
         targetHit: 0,
         targetLight: 0.45 + t * 0.25,
       };
@@ -150,7 +242,7 @@ function sampleTargets(elapsed: number, reduced: boolean) {
         activeIndex: idx,
         progress: u,
         targetAim: frontAim(idx, y),
-        targetHalo: { x: box.x, y, z: box.z, w: box.w * 1.05, d: box.d * 1.05 },
+        targetHalo: frontHalo(idx, y),
         targetHit: 0,
         targetLight: 0.85,
       };
@@ -164,7 +256,7 @@ function sampleTargets(elapsed: number, reduced: boolean) {
       activeIndex: idx,
       progress: u,
       targetAim: frontAim(idx, yTop),
-      targetHalo: { x: box.x, y: yTop, z: box.z, w: box.w * 1.08, d: box.d * 1.08 },
+      targetHalo: frontHalo(idx, yTop, 1.08),
       targetHit: pulse,
       targetLight: 0.7 + pulse * 0.9,
     };
@@ -174,6 +266,8 @@ function sampleTargets(elapsed: number, reduced: boolean) {
   const t = smootherstep((phase - 0.9) / 0.1);
   const last = worldCenter(N - 1);
   const y = THREE.MathUtils.lerp(last.y + last.h / 2, c0.y - c0.h / 2, t);
+  const fromH = frontHalo(N - 1, last.y + last.h / 2);
+  const toH = frontHalo(0, c0.y - c0.h / 2);
   return {
     phase,
     segment: "idle" as const,
@@ -181,11 +275,11 @@ function sampleTargets(elapsed: number, reduced: boolean) {
     progress: t,
     targetAim: { x: c0.x, y, z: c0.z + c0.d / 2 },
     targetHalo: {
-      x: THREE.MathUtils.lerp(last.x, c0.x, t),
+      x: THREE.MathUtils.lerp(fromH.x, toH.x, t),
       y,
-      z: THREE.MathUtils.lerp(last.z, c0.z, t),
-      w: THREE.MathUtils.lerp(last.w, c0.w, t) * 1.05,
-      d: THREE.MathUtils.lerp(last.d, c0.d, t) * 1.05,
+      z: THREE.MathUtils.lerp(fromH.z, toH.z, t),
+      w: THREE.MathUtils.lerp(fromH.w, toH.w, t),
+      d: HALO_FACE_DEPTH,
     },
     targetHit: 0,
     targetLight: THREE.MathUtils.lerp(0.35, 0.15, t),
@@ -218,6 +312,7 @@ function dampClock(c: ScanClock, next: ReturnType<typeof sampleTargets>, delta: 
 function initialClock(): ScanClock {
   const c0 = worldCenter(0);
   const y = c0.y - c0.h / 2;
+  const h0 = frontHalo(0, y);
   return {
     phase: 0,
     segment: "aim",
@@ -225,17 +320,17 @@ function initialClock(): ScanClock {
     progress: 0,
     hitStrength: 0,
     targetAim: frontAim(0, y),
-    targetHalo: { x: c0.x, y, z: c0.z, w: c0.w * 1.05, d: c0.d * 1.05 },
+    targetHalo: h0,
     targetHit: 0,
     targetLight: 0.2,
     aimX: c0.x,
     aimY: y,
     aimZ: c0.z + c0.d / 2,
-    haloX: c0.x,
-    haloY: y,
-    haloZ: c0.z,
-    haloW: c0.w * 1.05,
-    haloD: c0.d * 1.05,
+    haloX: h0.x,
+    haloY: h0.y,
+    haloZ: h0.z,
+    haloW: h0.w,
+    haloD: h0.d,
     lightIntensity: 0.2,
   };
 }
@@ -427,16 +522,20 @@ function HandScanner({
   reduced: boolean;
 }) {
   const pivot = useRef<Group>(null);
-  const beam = useRef<Mesh>(null);
+  const beamCore = useRef<Mesh>(null);
+  const beamGlow = useRef<Mesh>(null);
+  const impact = useRef<Mesh>(null);
   const screenMat = useRef<MeshStandardMaterial>(null);
   const target = useMemo(() => new THREE.Vector3(), []);
   const tipWorld = useMemo(() => new THREE.Vector3(), []);
+  const hitPoint = useMemo(() => new THREE.Vector3(), []);
   const mid = useMemo(() => new THREE.Vector3(), []);
   const dir = useMemo(() => new THREE.Vector3(), []);
   const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   const lookDummy = useMemo(() => new THREE.Object3D(), []);
   const bobY = useRef(0);
   const beamOpacity = useRef(0.25);
+  const impactScale = useRef(0.02);
 
   useFrame((state, delta) => {
     const gun = pivot.current;
@@ -455,19 +554,46 @@ function HandScanner({
     gun.quaternion.slerp(lookDummy.quaternion, 1 - Math.exp(-6.5 * delta));
 
     tipWorld.set(0, 0, -0.28).applyQuaternion(gun.quaternion).add(gun.position);
-    const dist = Math.max(0.05, tipWorld.distanceTo(target));
+    const distToAim = Math.max(0.05, tipWorld.distanceTo(target));
+    dir.subVectors(target, tipWorld).normalize();
 
-    if (beam.current) {
-      mid.lerpVectors(tipWorld, target, 0.5);
-      dir.subVectors(target, tipWorld).normalize();
-      beam.current.position.copy(mid);
-      beam.current.quaternion.setFromUnitVectors(yAxis, dir);
-      beam.current.scale.set(1, dist, 1);
-      const active =
-        segment === "slice" || segment === "hit" || segment === "approach" ? 0.5 : 0.2;
-      const wantOp = active + hitStrength * 0.3;
-      beamOpacity.current = THREE.MathUtils.damp(beamOpacity.current, wantOp, 7, delta);
-      (beam.current.material as THREE.MeshBasicMaterial).opacity = beamOpacity.current;
+    // Clip al primer cartón en la línea de visión (no atraviesa)
+    const hitDist = firstCartonHit(
+      tipWorld.x,
+      tipWorld.y,
+      tipWorld.z,
+      dir.x,
+      dir.y,
+      dir.z,
+      distToAim,
+    );
+    const beamLen = Math.max(0.04, hitDist);
+    hitPoint.copy(tipWorld).addScaledVector(dir, beamLen);
+    mid.lerpVectors(tipWorld, hitPoint, 0.5);
+
+    const active =
+      segment === "slice" || segment === "hit" || segment === "approach" ? 0.55 : 0.22;
+    const wantOp = active + hitStrength * 0.35;
+    beamOpacity.current = THREE.MathUtils.damp(beamOpacity.current, wantOp, 7, delta);
+
+    const placeBeam = (mesh: Mesh | null, opacityMul: number) => {
+      if (!mesh) return;
+      mesh.position.copy(mid);
+      mesh.quaternion.setFromUnitVectors(yAxis, dir);
+      mesh.scale.set(1, beamLen, 1);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = beamOpacity.current * opacityMul;
+    };
+    placeBeam(beamCore.current, 1);
+    placeBeam(beamGlow.current, 0.45);
+
+    if (impact.current) {
+      impact.current.position.copy(hitPoint);
+      const wantScale = 0.018 + hitStrength * 0.04 + (segment === "slice" ? 0.01 : 0);
+      impactScale.current = THREE.MathUtils.damp(impactScale.current, wantScale, 10, delta);
+      impact.current.scale.setScalar(impactScale.current);
+      const mat = impact.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.8 + hitStrength * 2.2;
+      mat.opacity = 0.55 + hitStrength * 0.4;
     }
 
     if (screenMat.current) {
@@ -507,12 +633,39 @@ function HandScanner({
         </mesh>
       </group>
 
-      <mesh ref={beam}>
-        <cylinderGeometry args={[0.01, 0.0035, 1, 12]} />
+      {/* core fino */}
+      <mesh ref={beamCore} renderOrder={2}>
+        <cylinderGeometry args={[0.006, 0.0025, 1, 10]} />
         <meshBasicMaterial
-          color="#ff5a5a"
+          color="#ff4d4d"
           transparent
-          opacity={0.35}
+          opacity={0.55}
+          depthTest
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* glow exterior */}
+      <mesh ref={beamGlow} renderOrder={1}>
+        <cylinderGeometry args={[0.018, 0.008, 1, 12]} />
+        <meshBasicMaterial
+          color="#ff7a7a"
+          transparent
+          opacity={0.22}
+          depthTest
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* impacto en la superficie */}
+      <mesh ref={impact} renderOrder={3}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshStandardMaterial
+          color="#fecaca"
+          emissive="#ef4444"
+          emissiveIntensity={1}
+          transparent
+          opacity={0.7}
           depthWrite={false}
           toneMapped={false}
         />
@@ -550,7 +703,7 @@ function ScanHalo({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
       mat.opacity = smoothOp.current;
     }
     if (lightRef.current) {
-      lightRef.current.position.set(c.haloX, c.haloY + 0.08, c.haloZ);
+      lightRef.current.position.set(c.haloX, c.haloY + 0.06, c.haloZ + 0.08);
       lightRef.current.intensity = c.lightIntensity;
     }
   });

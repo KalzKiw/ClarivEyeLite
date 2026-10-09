@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.9 — 2026-10-09
+
+### Login — haz sin atravesar
+- Trazadora roja clipada con ray–AABB al primer cartón; laser dual + punto de impacto.
+- Halo ámbar en cara frontal; pistola reposicionada para mejor línea de visión.
+
 ## 0.3.8 — 2026-10-09
 
 ### Login — scan por caja
