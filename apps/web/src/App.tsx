@@ -1,6 +1,7 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { LoadingMark } from "@/components/LoadingMark";
 import { Shell } from "@/components/Shell";
-import { ClarivScanPage } from "@/modules/clarivscan/ClarivScanPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { LogPage } from "@/pages/LogPage";
 import { OrdersPage } from "@/pages/OrdersPage";
@@ -14,13 +15,28 @@ import { ScanStatsPage } from "@/pages/settings/ScanStatsPage";
 import { TeamPage } from "@/pages/TeamPage";
 import { TrainParserPage } from "@/pages/TrainParserPage";
 
+const ClarivScanPage = lazy(() =>
+  import("@/modules/clarivscan/ClarivScanPage").then((m) => ({ default: m.ClarivScanPage })),
+);
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<LoadingMark label="Cargando…" size="lg" fill />}>{children}</Suspense>;
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<Shell />}>
         <Route index element={<OrdersPage />} />
-        <Route path="clarivscan" element={<ClarivScanPage />} />
+        <Route
+          path="clarivscan"
+          element={
+            <LazyPage>
+              <ClarivScanPage />
+            </LazyPage>
+          }
+        />
         <Route path="picking" element={<PickingPage />} />
         <Route path="picking/:id" element={<PickingOrderPage />} />
         <Route path="log" element={<LogPage />} />

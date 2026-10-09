@@ -4,7 +4,7 @@ import { lazy, Suspense, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { AuthField } from "@/components/AuthField";
 import { ClarivBox } from "@/components/ClarivBox";
-import { LoadingMark } from "@/components/PackSpinner";
+import { LoadingMark } from "@/components/LoadingMark";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, ErrorNote } from "@/components/ui";
 import { hasAnyAccount } from "@/lib/auth";
@@ -20,18 +20,27 @@ const REGISTER_STEPS = ["Tus datos", "Contraseña"] as const;
 
 export function LoginPage() {
   const reduce = useReducedMotion();
-  const { user, login, register } = useAuth();
+  const { user, login, register, ready } = useAuth();
   const [mode, setMode] = useState<"login" | "register">(() =>
     hasAnyAccount() ? "login" : "register",
   );
   /** 1 = negocio+nombre+email · 2 = contraseñas */
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [name, setName] = useState("");
   const [businessName, setBusinessName] = useState("");
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-[hsl(var(--login-surface))]">
+        <LoadingMark label="Cargando…" size="lg" />
+      </div>
+    );
+  }
 
   if (user) return <Navigate to="/" replace />;
 
@@ -52,11 +61,22 @@ export function LoginPage() {
     setPassword2("");
   }
 
-  function onLogin(event: React.FormEvent) {
+  async function onLogin(event: React.FormEvent) {
     event.preventDefault();
     setError("");
-    const u = login(email, password);
-    if (!u) setError("Email o contraseña incorrectos");
+    setBusy(true);
+    try {
+      const u = await login(email, password);
+      if (!u) {
+        setError(
+          "No se pudo entrar. Si es la primera vez con la nube, usa «Crear cuenta».",
+        );
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo entrar");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function nextRegister() {
@@ -76,7 +96,7 @@ export function LoginPage() {
     setStep(2);
   }
 
-  function onRegister(event: React.FormEvent) {
+  async function onRegister(event: React.FormEvent) {
     event.preventDefault();
     setError("");
     if (password.length < 4) {
@@ -87,10 +107,13 @@ export function LoginPage() {
       setError("Las contraseñas no coinciden");
       return;
     }
+    setBusy(true);
     try {
-      register({ businessName, ownerName: name, email, password });
+      await register({ businessName, ownerName: name, email, password });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo crear la cuenta");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -101,7 +124,7 @@ export function LoginPage() {
     <div className="flex items-center gap-3">
       <ClarivBox size={34} className="brightness-125" />
       <span className="font-display text-xl font-semibold tracking-tight text-white drop-shadow-md">
-        ClarivEye Lite
+        ClarivPack
       </span>
     </div>
   );
@@ -119,7 +142,7 @@ export function LoginPage() {
                 <PackSpinner size="lg" label="Preparando envíos…" />
               </Suspense>
             </div>
-            <p className="text-center text-sm text-white/45">ClarivEye Lite · almacén sin fricción</p>
+            <p className="text-center text-sm text-white/45">ClarivPack · preparar y sacar pedidos</p>
           </div>
         </aside>
 
@@ -127,7 +150,7 @@ export function LoginPage() {
           {/* Móvil: solo marca (sin escena pesada) */}
           <div className="flex items-center gap-3 bg-[#10253f] px-5 py-4 lg:hidden">
             <ClarivBox size={32} className="brightness-125" />
-            <span className="font-display text-lg font-semibold text-white">ClarivEye Lite</span>
+            <span className="font-display text-lg font-semibold text-white">ClarivPack</span>
           </div>
 
           <div className="flex flex-1 flex-col justify-center px-5 py-8 sm:px-10">
@@ -141,8 +164,8 @@ export function LoginPage() {
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {mode === "login"
-                    ? "Email y contraseña del negocio."
-                    : "Datos del negocio y una contraseña. Listo."}
+                    ? "Email y contraseña del negocio. Si aún no tienes cuenta en la nube, créala."
+                    : "Datos del negocio y una contraseña. Entras al instante."}
                 </p>
               </header>
 
@@ -171,7 +194,12 @@ export function LoginPage() {
 
               <AnimatePresence mode="wait">
                 {mode === "login" ? (
-                  <motion.form key="login" {...fade} onSubmit={onLogin} className="space-y-4">
+                  <motion.form
+                    key="login"
+                    {...fade}
+                    onSubmit={(e) => void onLogin(e)}
+                    className="space-y-4"
+                  >
                     <AuthField
                       label="Email"
                       icon={Mail}
@@ -193,8 +221,8 @@ export function LoginPage() {
                       minLength={4}
                     />
                     <ErrorNote message={error} />
-                    <Button type="submit" className={ctaClass}>
-                      Entrar
+                    <Button type="submit" className={ctaClass} disabled={busy}>
+                      {busy ? "Entrando…" : "Entrar"}
                       <ArrowRight size={17} />
                     </Button>
                     <p className="text-center text-xs text-muted-foreground">
@@ -254,7 +282,7 @@ export function LoginPage() {
                         </Button>
                       </form>
                     ) : (
-                      <form onSubmit={onRegister} className="space-y-3.5">
+                      <form onSubmit={(e) => void onRegister(e)} className="space-y-3.5">
                         <p className="text-sm text-muted-foreground">
                           Contraseña para{" "}
                           <span className="font-semibold text-foreground">{businessName}</span>

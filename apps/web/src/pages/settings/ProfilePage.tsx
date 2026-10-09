@@ -4,15 +4,35 @@ import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 
 export function ProfilePage() {
-  const { user, changePassword } = useAuth();
+  const { user, updateName, changePassword } = useAuth();
+  const [name, setName] = useState(user?.name ?? "");
+  const [nameMsg, setNameMsg] = useState("");
+  const [nameErr, setNameErr] = useState("");
   const [editingPass, setEditingPass] = useState(false);
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newPass2, setNewPass2] = useState("");
   const [passMsg, setPassMsg] = useState("");
   const [passErr, setPassErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function onPassword(event: React.FormEvent) {
+  async function onSaveName(event: React.FormEvent) {
+    event.preventDefault();
+    setNameErr("");
+    setNameMsg("");
+    setBusy(true);
+    try {
+      const u = await updateName(name);
+      if (!u) setNameErr("No se pudo guardar el nombre");
+      else setNameMsg("Nombre actualizado");
+    } catch (e) {
+      setNameErr(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPassword(event: React.FormEvent) {
     event.preventDefault();
     setPassErr("");
     setPassMsg("");
@@ -20,16 +40,21 @@ export function ProfilePage() {
       setPassErr("Las contraseñas nuevas no coinciden");
       return;
     }
-    const r = changePassword(curPass, newPass);
-    if (!r.ok) {
-      setPassErr(r.error);
-      return;
+    setBusy(true);
+    try {
+      const r = await changePassword(curPass, newPass);
+      if (!r.ok) {
+        setPassErr(r.error);
+        return;
+      }
+      setPassMsg("Contraseña cambiada");
+      setCurPass("");
+      setNewPass("");
+      setNewPass2("");
+      setEditingPass(false);
+    } finally {
+      setBusy(false);
     }
-    setPassMsg("Contraseña cambiada");
-    setCurPass("");
-    setNewPass("");
-    setNewPass2("");
-    setEditingPass(false);
   }
 
   return (
@@ -37,27 +62,31 @@ export function ProfilePage() {
       <SettingsBack />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Perfil</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Tu cuenta en este dispositivo</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Datos sincronizados con tu email en la nube
+        </p>
       </div>
 
-      <Card className="space-y-4 overflow-hidden p-0">
-        <div className="bg-gradient-to-br from-primary/15 to-transparent px-4 py-5">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-lg font-bold text-primary-foreground">
-            {(user?.name ?? "?")
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((p) => p[0]?.toUpperCase() ?? "")
-              .join("")}
-          </div>
-          <p className="mt-3 text-lg font-semibold">{user?.name}</p>
-          <p className="text-sm text-muted-foreground">{user?.email}</p>
-        </div>
-        <div className="space-y-3 px-4 pb-4">
+      <Card className="space-y-4">
+        <form onSubmit={(e) => void onSaveName(e)} className="space-y-3">
+          <Field label="Nombre">
+            <TextInput value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
+          </Field>
+          <Field label="Email">
+            <TextInput value={user?.email ?? ""} disabled />
+          </Field>
           <div className="rounded-xl bg-muted/50 px-3 py-2.5">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Rol</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Rol
+            </p>
             <p className="text-sm font-semibold capitalize">{user?.role}</p>
           </div>
-        </div>
+          <ErrorNote message={nameErr} />
+          {nameMsg ? <p className="text-xs text-primary">{nameMsg}</p> : null}
+          <Button type="submit" className="w-full" disabled={busy}>
+            Guardar nombre
+          </Button>
+        </form>
       </Card>
 
       {!editingPass ? (
@@ -67,7 +96,7 @@ export function ProfilePage() {
       ) : (
         <Card className="space-y-3">
           <p className="text-sm font-semibold">Nueva contraseña</p>
-          <form onSubmit={onPassword} className="space-y-3">
+          <form onSubmit={(e) => void onPassword(e)} className="space-y-3">
             <Field label="Contraseña actual">
               <TextInput
                 type="password"
@@ -97,9 +126,6 @@ export function ProfilePage() {
                 minLength={4}
               />
             </Field>
-            {newPass2 && newPass !== newPass2 ? (
-              <p className="text-xs text-destructive">No coinciden</p>
-            ) : null}
             <ErrorNote message={passErr} />
             {passMsg ? <p className="text-xs text-primary">{passMsg}</p> : null}
             <div className="flex gap-2">
@@ -107,17 +133,11 @@ export function ProfilePage() {
                 type="button"
                 variant="ghost"
                 className="flex-1"
-                onClick={() => {
-                  setEditingPass(false);
-                  setPassErr("");
-                  setCurPass("");
-                  setNewPass("");
-                  setNewPass2("");
-                }}
+                onClick={() => setEditingPass(false)}
               >
                 Cancelar
               </Button>
-              <Button type="submit" className="flex-1">
+              <Button type="submit" className="flex-1" disabled={busy}>
                 Guardar
               </Button>
             </div>

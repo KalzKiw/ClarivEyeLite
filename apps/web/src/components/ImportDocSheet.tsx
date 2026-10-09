@@ -1,23 +1,19 @@
-import { Camera, FileUp, PenLine, X } from "lucide-react";
+import { Camera, FileUp, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
-/**
- * Modal inferior: PDF (primario), cámara/foto o entrada manual.
- */
+/** Modal: PDF o cámara/foto (sin entrada manual — eso es Crear pedido). */
 export function ImportDocSheet({
   open,
   onClose,
   busy,
   onPdf,
   onImage,
-  onManual,
 }: {
   open: boolean;
   onClose: () => void;
   busy?: boolean;
   onPdf: (file: File | null) => void;
   onImage: (file: File | null) => void;
-  onManual: () => void;
 }) {
   const pdfRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLInputElement>(null);
@@ -39,13 +35,22 @@ export function ImportDocSheet({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" aria-label="Cerrar" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+        aria-label="Cerrar"
+        onClick={onClose}
+      />
       <div className="relative z-10 w-full max-w-lg rounded-t-2xl bg-card p-5 shadow-xl sm:rounded-2xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Añadir documento</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">Elige cómo cargar el albarán</p>
+            <h2 className="text-lg font-semibold tracking-tight">Escanear albarán</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">PDF o foto del documento</p>
           </div>
           <button
             type="button"
@@ -95,7 +100,9 @@ export function ImportDocSheet({
             </span>
             <span>
               <span className="block text-sm font-semibold">Subir PDF</span>
-              <span className="block text-xs text-primary-foreground/80">Recomendado · layout + OCR</span>
+              <span className="block text-xs text-primary-foreground/80">
+                Recomendado · layout + OCR
+              </span>
             </span>
           </button>
 
@@ -111,24 +118,6 @@ export function ImportDocSheet({
             <span>
               <span className="block text-sm font-semibold text-foreground">Cámara o foto</span>
               <span className="block text-xs text-muted-foreground">Imagen del albarán</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              onManual();
-              onClose();
-            }}
-            className="flex w-full items-center gap-3 rounded-xl border border-border bg-background px-4 py-3.5 text-left transition active:scale-[0.99] disabled:opacity-50"
-          >
-            <span className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <PenLine size={20} />
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-foreground">Entrada manual</span>
-              <span className="block text-xs text-muted-foreground">Añadir líneas a mano</span>
             </span>
           </button>
         </div>

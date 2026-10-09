@@ -1,9 +1,11 @@
 import { ClipboardList, PackageCheck, ScanLine, Settings } from "lucide-react";
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { ClarivBox } from "@/components/ClarivBox";
+import { InstallPrompt } from "@/components/InstallPrompt";
+import { LoadingMark } from "@/components/LoadingMark";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/cn";
-import { loadPlan } from "@/lib/store";
+import { usePlan } from "@/lib/use-app-store";
 
 const HEADER_H = "h-14";
 
@@ -15,8 +17,16 @@ const tabs = [
 ];
 
 export function Shell() {
-  const { user, business } = useAuth();
-  const plan = loadPlan();
+  const { user, business, ready } = useAuth();
+  const plan = usePlan();
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <LoadingMark label="Cargando…" size="lg" />
+      </div>
+    );
+  }
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -27,10 +37,12 @@ export function Shell() {
           <div className="flex min-w-0 items-center gap-2.5">
             <ClarivBox size={28} className="shrink-0 brightness-125" />
             <div className="min-w-0">
-              <p className="truncate text-lg font-semibold leading-none">
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-primary-foreground/75">
+                ClarivPack
+              </p>
+              <p className="truncate text-base font-semibold leading-tight">
                 {business?.name ?? "Negocio"}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-primary-foreground/80">{user.name}</p>
             </div>
           </div>
           <NavLink
@@ -45,6 +57,8 @@ export function Shell() {
       <main className="mx-auto w-full max-w-lg flex-1 space-y-4 px-4 py-4">
         <Outlet />
       </main>
+
+      <InstallPrompt />
 
       <nav className="bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur transition duration-300">
         <ul className="mx-auto grid max-w-lg grid-cols-4">

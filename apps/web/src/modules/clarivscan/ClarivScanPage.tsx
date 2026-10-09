@@ -7,15 +7,17 @@ import {
   type LineWarning,
 } from "@clariveye-lite/domain";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { CreateOrderSheet } from "@/components/CreateOrderSheet";
 import { ImportDocSheet } from "@/components/ImportDocSheet";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { getActiveDocProfile } from "@/lib/doc-profiles-store";
 import { recognizeDocumentStructured, type RecognizeSource } from "@/lib/ocr";
 import { setPendingTrainFile } from "@/lib/pending-train-file";
-import { createOrderFromLines, loadOrders, loadPlan, saveOrders } from "@/lib/store";
+import { createOrderFromLines, saveOrders } from "@/lib/store";
+import { useOrders, usePlan } from "@/lib/use-app-store";
 
 interface DraftLine {
   reference: string;
@@ -97,13 +99,12 @@ export function ClarivScanPage() {
   const [assisted, setAssisted] = useState(false);
   const [candidates, setCandidates] = useState<AssistedCandidate[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
+  const orders = useOrders();
+  const plan = usePlan();
+  const openCount = countOpenOrders(orders);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [openCount, setOpenCount] = useState(() => countOpenOrders(loadOrders()));
-
-  useEffect(() => {
-    setOpenCount(countOpenOrders(loadOrders()));
-  }, []);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const includedCount = useMemo(() => lines.filter((l) => l.included).length, [lines]);
   const suspiciousPending = useMemo(
@@ -256,15 +257,8 @@ export function ClarivScanPage() {
     setLines((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function refreshPlanGate() {
-    setOpenCount(countOpenOrders(loadOrders()));
-  }
-
   function confirmOrder() {
-    const orders = loadOrders();
-    const plan = loadPlan();
     if (!canCreateOrder(orders, plan)) {
-      setOpenCount(countOpenOrders(orders));
       setUpgradeOpen(true);
       return;
     }
@@ -296,7 +290,12 @@ export function ClarivScanPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">ClarivScan</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          1. Escanea el albarán · 2. Revisa líneas · 3. Crea el pedido
+        </p>
+      </div>
 
       <Button
         type="button"
@@ -305,7 +304,17 @@ export function ClarivScanPage() {
         onClick={() => setImportOpen(true)}
       >
         <Plus size={18} />
-        {busy ? status || "Leyendo…" : "Añadir documento"}
+        {busy ? status || "Leyendo…" : "Escanear / subir albarán"}
+      </Button>
+
+      <Button
+        type="button"
+        variant="ghost"
+        className="w-full"
+        disabled={busy}
+        onClick={() => setCreateOpen(true)}
+      >
+        Crear pedido a mano
       </Button>
 
       <ImportDocSheet
@@ -314,8 +323,9 @@ export function ClarivScanPage() {
         busy={busy}
         onPdf={(f) => void onFile(f)}
         onImage={(f) => void onFile(f)}
-        onManual={addManual}
       />
+
+      <CreateOrderSheet open={createOpen} onClose={() => setCreateOpen(false)} />
 
       {trainedProfile ? (
         <p className="text-xs text-muted-foreground">
@@ -565,7 +575,6 @@ export function ClarivScanPage() {
         open={upgradeOpen}
         openCount={openCount}
         onClose={() => setUpgradeOpen(false)}
-        onUpgraded={refreshPlanGate}
       />
     </div>
   );

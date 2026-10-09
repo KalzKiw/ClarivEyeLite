@@ -481,26 +481,4 @@ export function PackSpinner({ className, size = "sm", label }: PackSpinnerProps)
   );
 }
 
-export function LoadingMark({
-  className,
-  label = "Cargando…",
-  size = "sm",
-  fill = false,
-}: {
-  className?: string;
-  label?: string;
-  size?: "sm" | "md" | "lg";
-  fill?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-center",
-        fill && "absolute inset-0 h-full w-full",
-        className,
-      )}
-    >
-      <PackSpinner size={size} label={label} />
-    </div>
-  );
-}
+export { LoadingMark } from "@/components/LoadingMark";

@@ -4,7 +4,7 @@ import { SettingsBack } from "@/components/SettingsNavRow";
 import { StepProgress } from "@/components/StepProgress";
 import { Button, Card, ErrorNote, Field, TextInput } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
-import { loadPlan } from "@/lib/store";
+import { usePlan } from "@/lib/use-app-store";
 
 const INVITE_STEPS = ["Nombre", "Email", "PIN"] as const;
 
@@ -18,7 +18,7 @@ export function TeamPage() {
   const [pin2, setPin2] = useState("");
   const [error, setError] = useState("");
   const [okMsg, setOkMsg] = useState("");
-  const plan = loadPlan();
+  const plan = usePlan();
 
   const operarios = users.filter((u) => u.role === "operario");
   const isOwner = user?.role === "owner";
@@ -76,13 +76,17 @@ export function TeamPage() {
       setError("Los PIN no coinciden");
       return;
     }
-    const created = inviteOperario({ name, email, pin });
-    if (!created) {
-      setError("No se pudo crear (email duplicado o datos incompletos)");
-      return;
-    }
-    setOkMsg(`${created.name} ya puede entrar con ${created.email}`);
-    resetInvite();
+    void (async () => {
+      const created = await inviteOperario({ name, email, pin });
+      if (!created) {
+        setError(
+          "En la nube, el operario se une con el código de negocio al registrarse. O email duplicado.",
+        );
+        return;
+      }
+      setOkMsg(`${created.name} ya puede entrar con ${created.email}`);
+      resetInvite();
+    })();
   }
 
   return (
@@ -92,6 +96,16 @@ export function TeamPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
         <p className="mt-1 text-sm text-muted-foreground">Quién puede hacer picking</p>
       </div>
+
+      {isOwner && business?.id ? (
+        <Card className="space-y-2 border-primary/20 bg-primary/5">
+          <p className="text-xs font-bold uppercase tracking-wide text-primary">Código de negocio</p>
+          <p className="break-all font-mono text-xs">{business.id}</p>
+          <p className="text-xs text-muted-foreground">
+            Compártelo para que un operario se registre y se una (Pro).
+          </p>
+        </Card>
+      ) : null}
 
       <Card className="space-y-2">
         <p className="text-sm font-semibold">Usuarios ({users.length})</p>
@@ -111,7 +125,7 @@ export function TeamPage() {
                 <button
                   type="button"
                   className="text-xs text-destructive"
-                  onClick={() => kickOperario(u.id)}
+                  onClick={() => void kickOperario(u.id)}
                 >
                   Quitar
                 </button>

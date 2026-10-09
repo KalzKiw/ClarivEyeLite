@@ -17,7 +17,6 @@ import {
   type DocumentProfile,
   type ProfileBand,
 } from "@clariveye-lite/domain";
-import { createWorker, PSM, type Worker } from "tesseract.js";
 import { getActiveDocProfile, recordProfileOutcome } from "@/lib/doc-profiles-store";
 import {
   extractPdfLayout,
@@ -26,6 +25,7 @@ import {
   renderPdfPagesSeparately,
 } from "@/lib/pdf-text";
 import { recordScanStat } from "@/lib/scan-stats";
+import type { PSM, Worker } from "tesseract.js";
 
 export type RecognizeSource = "pdf-text" | "pdf-layout" | "ocr" | "trained" | "assisted";
 
@@ -43,10 +43,18 @@ export type RecognizeOptions = {
 };
 
 let workerPromise: Promise<Worker> | null = null;
+let psmSingleColumn: PSM | undefined;
+let psmSingleBlock: PSM | undefined;
 
+/** Tesseract solo se carga al escanear; no entra en el precache inicial de la PWA. */
 async function getWorker(): Promise<Worker> {
   if (!workerPromise) {
-    workerPromise = createWorker("spa+eng");
+    workerPromise = (async () => {
+      const { createWorker, PSM } = await import("tesseract.js");
+      psmSingleColumn = PSM.SINGLE_COLUMN;
+      psmSingleBlock = PSM.SINGLE_BLOCK;
+      return createWorker("spa+eng");
+    })();
   }
   return workerPromise;
 }
@@ -140,7 +148,7 @@ async function ocrCanvas(
 ): Promise<string> {
   const worker = await getWorker();
   await worker.setParameters({
-    tessedit_pageseg_mode: opts?.psm === "4" ? PSM.SINGLE_COLUMN : PSM.SINGLE_BLOCK,
+    tessedit_pageseg_mode: opts?.psm === "4" ? psmSingleColumn : psmSingleBlock,
     preserve_interword_spaces: "1",
     tessedit_char_whitelist: opts?.whitelist ?? "",
   });

@@ -1,7 +1,8 @@
 import { FREE_OPEN_LIMIT } from "@clariveye-lite/domain";
-import { ArrowRight } from "lucide-react";
+import { Sparkles } from "lucide-react";
+import { BoxMascot } from "@/components/BoxMascot";
 
-/** Franja fina de cupo Free (sin mascota ni estilo popup). */
+/** Banner de cupo Free con progreso y CTA a Pro. */
 export function FreeLimitBanner({
   openCount,
   onOpenUpgrade,
@@ -9,17 +10,38 @@ export function FreeLimitBanner({
   openCount: number;
   onOpenUpgrade: () => void;
 }) {
+  const pct = Math.min(100, Math.round((openCount / FREE_OPEN_LIMIT) * 100));
+  const full = openCount >= FREE_OPEN_LIMIT;
+
   return (
     <button
       type="button"
       onClick={onOpenUpgrade}
-      className="flex w-full items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-3.5 py-2.5 text-left transition active:scale-[0.99] hover:bg-violet-100/80"
+      className="relative w-full overflow-hidden rounded-2xl border border-violet-300/80 bg-gradient-to-br from-violet-600 via-violet-600 to-fuchsia-700 p-4 text-left text-white shadow-md transition active:scale-[0.99] hover:brightness-105"
     >
-      <p className="min-w-0 text-sm font-medium text-violet-950">
-        Cupo Free {openCount}/{FREE_OPEN_LIMIT} ·{" "}
-        <span className="font-semibold text-violet-700">Ver Pro</span>
-      </p>
-      <ArrowRight size={16} className="shrink-0 text-violet-700" />
+      <div className="pointer-events-none absolute -right-2 -top-2 opacity-90">
+        <BoxMascot mood={full ? "wow" : "happy"} className="h-[72px] w-[72px]" />
+      </div>
+      <div className="relative z-10 max-w-[75%] space-y-2">
+        <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-white/80">
+          <Sparkles size={12} />
+          Cupo Free
+        </p>
+        <p className="text-base font-semibold leading-snug">
+          {full
+            ? "Has llenado tus pedidos abiertos"
+            : `${openCount} de ${FREE_OPEN_LIMIT} pedidos abiertos`}
+        </p>
+        <div className="h-2 overflow-hidden rounded-full bg-white/20">
+          <div
+            className="h-full rounded-full bg-white transition-all"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="text-xs font-medium text-white/90">
+          {full ? "Pasa a Pro y sigue sin freno →" : "Pro = ilimitados + equipo →"}
+        </p>
+      </div>
     </button>
   );
 }

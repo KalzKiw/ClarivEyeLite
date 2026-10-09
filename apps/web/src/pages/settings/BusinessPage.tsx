@@ -9,8 +9,9 @@ export function BusinessPage() {
   const [bizName, setBizName] = useState(business?.name ?? "");
   const [bizMsg, setBizMsg] = useState("");
   const [bizErr, setBizErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function onRename(event: React.FormEvent) {
+  async function onRename(event: React.FormEvent) {
     event.preventDefault();
     setBizErr("");
     setBizMsg("");
@@ -18,12 +19,17 @@ export function BusinessPage() {
       setBizErr("Solo el dueño puede renombrar el negocio");
       return;
     }
-    const b = renameBusiness(bizName);
-    if (!b) {
-      setBizErr("Nombre demasiado corto");
-      return;
+    setBusy(true);
+    try {
+      const b = await renameBusiness(bizName);
+      if (!b) {
+        setBizErr("Nombre demasiado corto");
+        return;
+      }
+      setBizMsg("Nombre actualizado");
+    } finally {
+      setBusy(false);
     }
-    setBizMsg("Nombre actualizado");
   }
 
   return (
@@ -31,18 +37,21 @@ export function BusinessPage() {
       <SettingsBack />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Negocio</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Nombre que ves en el header</p>
+        <p className="mt-1 text-sm text-muted-foreground">Nombre que ves en el header · sync nube</p>
       </div>
 
       <Card className="space-y-3">
         {isOwner ? (
-          <form onSubmit={onRename} className="space-y-3">
+          <form onSubmit={(e) => void onRename(e)} className="space-y-3">
             <Field label="Nombre del negocio">
               <TextInput value={bizName} onChange={(e) => setBizName(e.target.value)} required />
             </Field>
+            {business?.id ? (
+              <p className="break-all font-mono text-[10px] text-muted-foreground">ID: {business.id}</p>
+            ) : null}
             <ErrorNote message={bizErr} />
             {bizMsg ? <p className="text-xs font-medium text-primary">{bizMsg}</p> : null}
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full" disabled={busy}>
               Guardar
             </Button>
           </form>

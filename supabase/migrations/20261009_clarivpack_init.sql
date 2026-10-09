@@ -1,0 +1,2 @@
+-- Applied to project ClarivPack (skhyfemtvhczulykiwny). Reference copy.
+-- See MCP apply_migration clarivpack_init + bootstrap_rpc + join_operario.

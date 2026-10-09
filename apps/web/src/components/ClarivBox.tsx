@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
 
-/** Caja isométrica ClarivEye — marca / carga */
+/** Caja isométrica ClarivPack — marca / carga */
 export function ClarivBox({
   className,
   size = 40,

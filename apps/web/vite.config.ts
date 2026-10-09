@@ -10,13 +10,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "icons/icon-180.png", "icons/clariv-eye.png"],
+      includeAssets: [
+        "favicon.svg",
+        "icons/favicon-32.png",
+        "icons/icon-180-v2.png",
+        "icons/clarivpack-mark.png",
+      ],
       manifest: {
-        name: "ClarivEye Lite",
-        short_name: "ClarivEye",
-        description: "Picking, ClarivScan y pedidos de salida",
+        name: "ClarivPack",
+        short_name: "ClarivPack",
+        description: "Preparar y sacar pedidos · ClarivScan y picking",
         theme_color: "#2563eb",
-        background_color: "#ffffff",
+        background_color: "#2563eb",
         display: "standalone",
         orientation: "any",
         start_url: "/",
@@ -25,17 +30,19 @@ export default defineConfig({
         categories: ["business", "productivity"],
         icons: [
           {
-            src: "/icons/icon-192.png",
+            src: "/icons/icon-192-v2.png",
             sizes: "192x192",
             type: "image/png",
+            purpose: "any",
           },
           {
-            src: "/icons/icon-512.png",
+            src: "/icons/icon-512-v2.png",
             sizes: "512x512",
             type: "image/png",
+            purpose: "any",
           },
           {
-            src: "/icons/icon-512.png",
+            src: "/icons/icon-512-maskable-v2.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
@@ -44,10 +51,28 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
-        // El bundle incluye three.js / OCR; precache hasta ~4 MiB
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webp}"],
+        // Precache shell ligero; JS/WASM pesados (OCR, PDF, three) vía runtime cache
+        maximumFileSizeToCacheInBytes: 2 * 1024 * 1024,
+        globPatterns: ["**/*.{css,html,ico,png,svg,woff2,webp}"],
         runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith("/assets/"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "app-assets-cache",
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/tesseract\.js@.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "tesseract-cdn-cache",
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",
@@ -75,6 +100,19 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@clariveye-lite/domain": path.resolve(__dirname, "../../packages/domain/src/index.ts"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/tesseract.js")) return "tesseract";
+          if (id.includes("pdfjs-dist")) return "pdfjs";
+          if (id.includes("jspdf") || id.includes("jspdf-autotable")) return "jspdf";
+          if (id.includes("node_modules/three") || id.includes("@react-three")) return "three";
+          if (id.includes("@zxing")) return "zxing";
+        },
+      },
     },
   },
   server: { port: 5174 },
