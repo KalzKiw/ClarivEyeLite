@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.16 — 2026-10-09
+
+### PackSpinner — papel al girar + relleno alto
+- Cajitas a la altura del contenedor (lectura desde arriba); paredes laterales cerradas.
+- Al girar: hoja de papel + cáscara con franja que envuelve; luego whoosh.
+
 ## 0.3.15 — 2026-10-09
 
 ### PackSpinner — solo caja, fill + giro
