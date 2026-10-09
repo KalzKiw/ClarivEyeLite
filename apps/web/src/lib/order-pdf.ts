@@ -150,7 +150,6 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
 
   const totalQty = order.lines.reduce((s, l) => s + l.quantity, 0);
   const totalPkg = order.lines.reduce((s, l) => s + l.packages, 0);
-  const pickedCount = order.lines.filter((l) => l.picked).length;
   const amounts = order.lines.map(lineAmount);
   const hasPrices = amounts.some((a) => a !== null);
   const totalAmount = hasPrices
@@ -191,7 +190,7 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   doc.line(MARGIN, y, CONTENT_RIGHT, y);
   y += 6;
 
-  // Doc + meta + resumen en texto (sin KPIs)
+  // Doc + estado/fechas (uds/bultos van en el total bajo la tabla)
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
@@ -200,17 +199,10 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...MUTED);
-  const metaBits = [
-    ORDER_STATUS_LABEL[order.status],
-    `Alta ${fmtDate(order.createdAt)}`,
-    `${order.lines.length} líneas`,
-    `${totalQty} uds`,
-    `${totalPkg} bultos`,
-    `${pickedCount}/${order.lines.length} prep.`,
-  ];
-  if (order.docDate) metaBits.splice(1, 0, `Doc. ${order.docDate}`);
-  if (hasPrices && totalAmount !== null) metaBits.push(fmtMoney(totalAmount));
-  doc.text(metaBits.join("  ·  "), MARGIN, y);
+  const metaBits = [ORDER_STATUS_LABEL[order.status], `Alta ${fmtDate(order.createdAt)}`];
+  if (order.docDate) metaBits.push(`Doc. ${order.docDate}`);
+  if (order.deliveredAt) metaBits.push(`Entrega ${fmtDate(order.deliveredAt)}`);
+  doc.text(metaBits.join(" · "), MARGIN, y);
   y += 4;
   if (order.notes?.trim()) {
     doc.setTextColor(...INK);
@@ -222,18 +214,19 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
     doc.setFont("helvetica", "normal");
   }
 
-  // —— Códigos escaneables (compactos) ——
+  // —— Códigos: barcode + QR del pedido (sin volcar el token UUID)
   y += 2;
-  const codeH = 28;
+  const codeH = 26;
   doc.setDrawColor(230, 230, 235);
   doc.setLineWidth(0.25);
   doc.roundedRect(MARGIN, y, CONTENT_RIGHT - MARGIN, codeH, 1.5, 1.5, "S");
-  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 4, 95, 12);
-  doc.setFontSize(6.5);
+  doc.addImage(barcodeImg, "PNG", MARGIN + 3, y + 3, 95, 12);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
   doc.setTextColor(...MUTED);
-  doc.text(`${token}  ·  Escanea CEL1 / QR → Picking`, MARGIN + 3, y + 22);
-  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 30, y + 2, 24, 24);
-  y += codeH + 5;
+  doc.text(`Pedido ${order.docNumber} — escanea el codigo o el QR en Picking`, MARGIN + 3, y + 21);
+  doc.addImage(qrImg, "PNG", CONTENT_RIGHT - 28, y + 2, 22, 22);
+  y += codeH + 4;
 
   // —— Tabla (empieza pronto; sin título grande ni KPIs) ——
   autoTable(doc, {
