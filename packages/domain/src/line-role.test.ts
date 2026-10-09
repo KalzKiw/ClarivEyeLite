@@ -41,7 +41,11 @@ describe("line-role structural classifier", () => {
     // Ciudad inventada — no hay lista de ciudades
     expect(classifyText("08210 Viladecans, Catalunya").role).toBe("address");
     expect(classifyText("35001 Las Palmas").role).toBe("address");
+    expect(classifyText("Sevilla, España").role).toBe("address");
     expect(isProductLine(line("08210 Viladecans, Catalunya"))).toBe(false);
+    // Columnas partidas: ref=CP, nombre=localidad
+    expect(isProductLine(line("41001", "Sevilla, España", 1))).toBe(false);
+    expect(isProductLine(line("99102", "Nombreraro, Regionx", 1))).toBe(false);
   });
 
   it("prose: párrafo largo o OCR pegado sin espacios", () => {

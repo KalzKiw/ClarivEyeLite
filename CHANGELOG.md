@@ -5,6 +5,7 @@
 ### Clasificador estructural de líneas (deny-by-default)
 - `line-role`: product / phone / address / prose / meta por forma, no por frases de un albarán.
 - Solo entra al pedido si `productScore ≥ 0.65`; quality-gate y ClarivScan delegan ahí.
+- CP (5 dígitos) + “Ciudad, País” no pasa como SKU/nombre (dirección partida en columnas).
 
 ## 0.3.22 — 2026-10-09
 

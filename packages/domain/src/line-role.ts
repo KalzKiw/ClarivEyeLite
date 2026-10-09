@@ -54,6 +54,21 @@ function wordCount(raw: string): number {
 }
 
 /**
+ * Localidad / país: "Ciudad, País" sin dígitos ni razón social (S.A./S.L.).
+ * Estructural — no lista de ciudades.
+ */
+function looksLikePlaceName(raw: string): boolean {
+  const t = raw.trim();
+  if (!t || /\d/.test(t)) return false;
+  if (/\bS\.?\s*[AL]\.?\s*$/i.test(t)) return false;
+  const words = wordCount(t);
+  if (words < 1 || words > 4) return false;
+  // "Sevilla, España" / "Viladecans, Catalunya"
+  if (/,/.test(t) && /^[A-ZÁÉÍÓÚÑ]/.test(t)) return true;
+  return false;
+}
+
+/**
  * Clasifica un fragmento de texto por forma estructural.
  * No usa listas de ciudades ni frases de un proveedor concreto.
  */
@@ -132,6 +147,11 @@ export function classifyText(text: string | null | undefined): TextClassificatio
     reasons.push("postal_place_compact");
     return { role: "address", score: 0.85, reasons };
   }
+  // Solo localidad (“Sevilla, España”) — forma Ciudad, Región/País
+  if (looksLikePlaceName(raw)) {
+    reasons.push("place_name_shape");
+    return { role: "address", score: 0.86, reasons };
+  }
 
   // --- prose: muchas palabras O blob largo sin espacios ---
   if (words >= 8) {
@@ -163,6 +183,11 @@ export function productScore(line: DocumentLine): number {
   const name = (line.name || "").trim();
   const refClass = classifyText(ref);
   const nameClass = name ? classifyText(name) : null;
+
+  // CP (exactamente 5 dígitos) + localidad → dirección partida en columnas, no SKU
+  if (/^\d{5}$/.test(ref) && (looksLikePlaceName(name) || nameClass?.role === "address")) {
+    return 0.1;
+  }
 
   // Roles negativos en ref → fuera
   if (refClass.role === "phone" || refClass.role === "address" || refClass.role === "prose" || refClass.role === "meta") {
