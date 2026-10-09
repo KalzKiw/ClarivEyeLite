@@ -22,7 +22,7 @@ export function FreeLimitBanner({
       <div className="pointer-events-none absolute -right-8 top-0 size-28 rounded-full bg-[#86198f]/30 blur-xl" aria-hidden />
 
       <div className="relative flex items-center gap-3 px-3.5 py-3 sm:gap-4 sm:px-4 sm:py-3.5">
-        <BoxMascot mood="wink" className="h-14 w-[52px] shrink-0 drop-shadow-md sm:h-16 sm:w-[58px]" />
+        <BoxMascot mood="happy" className="h-14 w-[52px] shrink-0 drop-shadow-md sm:h-16 sm:w-[58px]" />
 
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-semibold text-white/90 sm:text-xs">
