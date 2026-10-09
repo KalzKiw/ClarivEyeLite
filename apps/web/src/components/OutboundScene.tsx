@@ -1,7 +1,6 @@
 import {
   ContactShadows,
   Environment,
-  OrbitControls,
   RoundedBox,
   SoftShadows,
 } from "@react-three/drei";
@@ -10,14 +9,18 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import type { Group, Mesh, MeshStandardMaterial, PointLight } from "three";
 import * as THREE from "three";
 
-const PERIOD = 7;
+const PERIOD = 14;
 const PALLET_Z = 0.4;
 const GUN_BASE = new THREE.Vector3(1.15, 1.05, 0.95);
-const HALO_THICKNESS = 0.02;
-/** Profundidad del halo en cara frontal (no atraviesa el cartón). */
-const HALO_FACE_DEPTH = 0.035;
+const HALO_THICKNESS = 0.022;
+const HALO_FACE_DEPTH = 0.032;
+const PALLET_OUT_X = 1.65;
+const PALLET_IN_X = -1.85;
+const HOLSTER = { x: 0.55, y: 0.55, z: 1.15 };
+/** Solo 2 cajas por pase de scan (no las 4 en bucle). */
+const SCAN_BOXES = [1, 2] as const;
 
-/** Cartones del stack (posición local al group z=PALLET_Z). */
+/** Cartones del stack (local al group z=PALLET_Z). */
 const PALLET_CARTONS = [
   { pos: [-0.2, 0.38, -0.08] as const, size: [0.46, 0.38, 0.4] as const, color: "#d4b896", rot: 0 },
   { pos: [0.26, 0.34, 0.1] as const, size: [0.38, 0.3, 0.36] as const, color: "#c5ced9", rot: 0.08 },
@@ -27,7 +30,16 @@ const PALLET_CARTONS = [
 
 const N = PALLET_CARTONS.length;
 
-type ScanSegment = "aim" | "approach" | "slice" | "hit" | "idle";
+type ScanSegment =
+  | "ambient"
+  | "aim"
+  | "approach"
+  | "slice"
+  | "hit"
+  | "rest"
+  | "swapOut"
+  | "swapIn"
+  | "settle";
 
 type ScanClock = {
   phase: number;
@@ -35,21 +47,21 @@ type ScanClock = {
   activeIndex: number;
   progress: number;
   hitStrength: number;
-  /** targets (sin damp) */
+  doScan: boolean;
   targetAim: { x: number; y: number; z: number };
-  targetHalo: { x: number; y: number; z: number; w: number; d: number };
+  targetHaloY: number;
   targetHit: number;
   targetLight: number;
-  /** smoothed */
+  targetPalletX: number;
+  targetDoor: number;
+  snapIn: boolean;
   aimX: number;
   aimY: number;
   aimZ: number;
-  haloX: number;
   haloY: number;
-  haloZ: number;
-  haloW: number;
-  haloD: number;
   lightIntensity: number;
+  doorGlow: number;
+  palletX: number;
 };
 
 function smootherstep(t: number) {
@@ -57,10 +69,10 @@ function smootherstep(t: number) {
   return x * x * x * (x * (x * 6 - 15) + 10);
 }
 
-function worldCenter(i: number) {
+function worldCenter(i: number, palletX = 0) {
   const c = PALLET_CARTONS[i];
   return {
-    x: c.pos[0],
+    x: c.pos[0] + palletX,
     y: c.pos[1],
     z: c.pos[2] + PALLET_Z,
     w: c.size[0],
@@ -69,28 +81,15 @@ function worldCenter(i: number) {
   };
 }
 
-function frontAim(i: number, sliceY: number) {
-  const c = worldCenter(i);
+function frontAim(i: number, sliceY: number, palletX = 0) {
+  const c = worldCenter(i, palletX);
   return { x: c.x, y: sliceY, z: c.z + c.d / 2 };
-}
-
-/** Halo fino sobre la cara frontal (z = frente), no un plano que cruza el volumen. */
-function frontHalo(i: number, sliceY: number, wScale = 1.05) {
-  const c = worldCenter(i);
-  return {
-    x: c.x,
-    y: sliceY,
-    z: c.z + c.d / 2,
-    w: c.w * wScale,
-    d: HALO_FACE_DEPTH,
-  };
 }
 
 type Aabb = { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number };
 
-function cartonAabb(i: number): Aabb {
-  const c = worldCenter(i);
-  // AABB axis-aligned (rotación leve de cartones ≈ ignorada a propósito)
+function cartonAabb(i: number, palletX: number): Aabb {
+  const c = worldCenter(i, palletX);
   const pad = 0.01;
   return {
     minX: c.x - c.w / 2 - pad,
@@ -102,7 +101,6 @@ function cartonAabb(i: number): Aabb {
   };
 }
 
-/** Ray–AABB: distancia al primer hit o null. */
 function intersectRayAabb(
   ox: number,
   oy: number,
@@ -114,13 +112,11 @@ function intersectRayAabb(
 ): number | null {
   let tMin = 0;
   let tMax = Infinity;
-
   const axes: [number, number, number, number][] = [
     [ox, dx, box.minX, box.maxX],
     [oy, dy, box.minY, box.maxY],
     [oz, dz, box.minZ, box.maxZ],
   ];
-
   for (const [o, d, minB, maxB] of axes) {
     if (Math.abs(d) < 1e-8) {
       if (o < minB || o > maxB) return null;
@@ -150,188 +146,361 @@ function firstCartonHit(
   dy: number,
   dz: number,
   maxDist: number,
+  palletX: number,
 ): number {
   let best = maxDist;
   for (let i = 0; i < N; i++) {
-    const t = intersectRayAabb(ox, oy, oz, dx, dy, dz, cartonAabb(i));
+    const t = intersectRayAabb(ox, oy, oz, dx, dy, dz, cartonAabb(i, palletX));
     if (t != null && t > 0.02 && t < best) best = t;
   }
   return best;
 }
 
+type Sample = {
+  phase: number;
+  segment: ScanSegment;
+  activeIndex: number;
+  progress: number;
+  doScan: boolean;
+  targetAim: { x: number; y: number; z: number };
+  targetHaloY: number;
+  targetHit: number;
+  targetLight: number;
+  targetPalletX: number;
+  targetDoor: number;
+  snapIn: boolean;
+};
+
 /**
- * Timeline:
- * 0–0.08 aim caja0
- * 0.08–0.90: 4 cajas × (approach + slice + hit)
- * 0.90–1 idle
+ * Ciclos alternos:
+ * - Par: ambient → scan 2 cajas → rest → swapOut → ambient vacío → swapIn
+ * - Impar: solo logística (sin scan) — rompe el bucle de “siempre escanear”
  */
-function sampleTargets(elapsed: number, reduced: boolean) {
+function sampleTargets(elapsed: number, reduced: boolean): Sample {
   const c2 = worldCenter(2);
   if (reduced) {
     return {
       phase: 0.5,
-      segment: "idle" as const,
+      segment: "ambient",
       activeIndex: 2,
       progress: 0.5,
-      targetAim: frontAim(2, c2.y),
-      targetHalo: frontHalo(2, c2.y),
+      doScan: false,
+      targetAim: HOLSTER,
+      targetHaloY: c2.y,
       targetHit: 0,
-      targetLight: 0.35,
+      targetLight: 0.1,
+      targetPalletX: 0,
+      targetDoor: 0.4,
+      snapIn: false,
     };
   }
 
+  const cycle = Math.floor(elapsed / PERIOD);
+  const doScan = cycle % 2 === 0;
   const phase = (elapsed % PERIOD) / PERIOD;
-  const c0 = worldCenter(0);
+  const lookRacks = { x: -1.2, y: 1.0, z: -0.4 };
 
-  if (phase < 0.08) {
-    const y = c0.y - c0.h / 2;
+  // —— Ciclo SIN scan: ambient → hold → out → empty → in ——
+  if (!doScan) {
+    if (phase < 0.28) {
+      const pulse = 0.35 + Math.sin(elapsed * 1.2) * 0.15;
+      return {
+        phase,
+        segment: "ambient",
+        activeIndex: 0,
+        progress: phase / 0.28,
+        doScan: false,
+        targetAim: lookRacks,
+        targetHaloY: 0.5,
+        targetHit: 0,
+        targetLight: 0.05,
+        targetPalletX: 0,
+        targetDoor: pulse,
+        snapIn: false,
+      };
+    }
+    if (phase < 0.4) {
+      return {
+        phase,
+        segment: "rest",
+        activeIndex: 0,
+        progress: (phase - 0.28) / 0.12,
+        doScan: false,
+        targetAim: HOLSTER,
+        targetHaloY: 0.5,
+        targetHit: 0,
+        targetLight: 0.05,
+        targetPalletX: 0,
+        targetDoor: 0.45,
+        snapIn: false,
+      };
+    }
+    if (phase < 0.58) {
+      const t = smootherstep((phase - 0.4) / 0.18);
+      return {
+        phase,
+        segment: "swapOut",
+        activeIndex: 0,
+        progress: t,
+        doScan: false,
+        targetAim: HOLSTER,
+        targetHaloY: 0.5,
+        targetHit: 0,
+        targetLight: 0.04,
+        targetPalletX: THREE.MathUtils.lerp(0, PALLET_OUT_X, t),
+        targetDoor: 0.55 + t * 0.35,
+        snapIn: false,
+      };
+    }
+    if (phase < 0.82) {
+      const pulse = 0.5 + Math.sin(elapsed * 1.4) * 0.2;
+      return {
+        phase,
+        segment: "ambient",
+        activeIndex: 0,
+        progress: (phase - 0.58) / 0.24,
+        doScan: false,
+        targetAim: lookRacks,
+        targetHaloY: 0.5,
+        targetHit: 0,
+        targetLight: 0.03,
+        targetPalletX: PALLET_OUT_X,
+        targetDoor: pulse,
+        snapIn: false,
+      };
+    }
+    const t = smootherstep((phase - 0.82) / 0.18);
     return {
       phase,
-      segment: "aim" as const,
+      segment: "swapIn",
       activeIndex: 0,
-      progress: phase / 0.08,
-      targetAim: frontAim(0, y),
-      targetHalo: frontHalo(0, y),
+      progress: t,
+      doScan: false,
+      targetAim: HOLSTER,
+      targetHaloY: 0.5,
       targetHit: 0,
-      targetLight: 0.25,
+      targetLight: 0.08,
+      targetPalletX: THREE.MathUtils.lerp(PALLET_IN_X, 0, t),
+      targetDoor: 0.4,
+      snapIn: true,
     };
   }
 
-  if (phase < 0.9) {
-    const local = (phase - 0.08) / 0.82;
-    const per = 1 / N;
-    const idx = Math.min(N - 1, Math.floor(local / per));
-    const u = (local - idx * per) / per;
+  // —— Ciclo CON scan (solo 2 cajas) ——
+  if (phase < 0.22) {
+    const pulse = 0.3 + Math.sin(elapsed * 1.1) * 0.12;
+    return {
+      phase,
+      segment: "ambient",
+      activeIndex: SCAN_BOXES[0],
+      progress: phase / 0.22,
+      doScan: true,
+      targetAim: lookRacks,
+      targetHaloY: 0.5,
+      targetHit: 0,
+      targetLight: 0.06,
+      targetPalletX: 0,
+      targetDoor: pulse,
+      snapIn: false,
+    };
+  }
+
+  if (phase < 0.52) {
+    const local = (phase - 0.22) / 0.3;
+    const per = 1 / SCAN_BOXES.length;
+    const si = Math.min(SCAN_BOXES.length - 1, Math.floor(local / per));
+    const idx = SCAN_BOXES[si];
+    const u = (local - si * per) / per;
     const box = worldCenter(idx);
     const yBot = box.y - box.h / 2;
     const yTop = box.y + box.h / 2;
-    const prevIdx = Math.max(0, idx - 1);
+    const prevIdx = SCAN_BOXES[Math.max(0, si - 1)];
     const prev = worldCenter(prevIdx);
 
-    // approach 0–0.22 | slice 0.22–0.78 | hit 0.78–1
-    if (u < 0.22) {
-      const t = smootherstep(u / 0.22);
-      const fromY = idx === 0 ? yBot : prev.y;
+    if (u < 0.18) {
+      const t = smootherstep(u / 0.18);
+      const fromY = si === 0 ? yBot : prev.y;
       const y = THREE.MathUtils.lerp(fromY, yBot, t);
-      const fromHalo = frontHalo(prevIdx, fromY);
-      const toHalo = frontHalo(idx, yBot);
       return {
         phase,
-        segment: "approach" as const,
+        segment: "approach",
         activeIndex: idx,
         progress: u,
+        doScan: true,
         targetAim: frontAim(idx, y),
-        targetHalo: {
-          x: THREE.MathUtils.lerp(fromHalo.x, toHalo.x, t),
-          y,
-          z: THREE.MathUtils.lerp(fromHalo.z, toHalo.z, t),
-          w: THREE.MathUtils.lerp(fromHalo.w, toHalo.w, t),
-          d: HALO_FACE_DEPTH,
-        },
+        targetHaloY: y,
         targetHit: 0,
         targetLight: 0.45 + t * 0.25,
+        targetPalletX: 0,
+        targetDoor: 0.35,
+        snapIn: false,
       };
     }
-
     if (u < 0.78) {
-      const t = smootherstep((u - 0.22) / 0.56);
+      const t = smootherstep((u - 0.18) / 0.6);
       const y = THREE.MathUtils.lerp(yBot, yTop, t);
       return {
         phase,
-        segment: "slice" as const,
+        segment: "slice",
         activeIndex: idx,
         progress: u,
+        doScan: true,
         targetAim: frontAim(idx, y),
-        targetHalo: frontHalo(idx, y),
+        targetHaloY: y,
         targetHit: 0,
         targetLight: 0.85,
+        targetPalletX: 0,
+        targetDoor: 0.35,
+        snapIn: false,
       };
     }
-
     const hitT = (u - 0.78) / 0.22;
     const pulse = Math.sin(hitT * Math.PI);
     return {
       phase,
-      segment: "hit" as const,
+      segment: "hit",
       activeIndex: idx,
       progress: u,
+      doScan: true,
       targetAim: frontAim(idx, yTop),
-      targetHalo: frontHalo(idx, yTop, 1.08),
+      targetHaloY: yTop,
       targetHit: pulse,
-      targetLight: 0.7 + pulse * 0.9,
+      targetLight: 0.7 + pulse * 0.8,
+      targetPalletX: 0,
+      targetDoor: 0.4,
+      snapIn: false,
     };
   }
 
-  // idle: soft return toward caja0 bottom
-  const t = smootherstep((phase - 0.9) / 0.1);
-  const last = worldCenter(N - 1);
-  const y = THREE.MathUtils.lerp(last.y + last.h / 2, c0.y - c0.h / 2, t);
-  const fromH = frontHalo(N - 1, last.y + last.h / 2);
-  const toH = frontHalo(0, c0.y - c0.h / 2);
+  if (phase < 0.6) {
+    return {
+      phase,
+      segment: "rest",
+      activeIndex: SCAN_BOXES[SCAN_BOXES.length - 1],
+      progress: (phase - 0.52) / 0.08,
+      doScan: true,
+      targetAim: HOLSTER,
+      targetHaloY: 0.5,
+      targetHit: 0,
+      targetLight: 0.08,
+      targetPalletX: 0,
+      targetDoor: 0.4,
+      snapIn: false,
+    };
+  }
+
+  if (phase < 0.74) {
+    const t = smootherstep((phase - 0.6) / 0.14);
+    return {
+      phase,
+      segment: "swapOut",
+      activeIndex: 0,
+      progress: t,
+      doScan: true,
+      targetAim: HOLSTER,
+      targetHaloY: 0.5,
+      targetHit: 0,
+      targetLight: 0.05,
+      targetPalletX: THREE.MathUtils.lerp(0, PALLET_OUT_X, t),
+      targetDoor: 0.5 + t * 0.4,
+      snapIn: false,
+    };
+  }
+
+  if (phase < 0.88) {
+    const pulse = 0.55 + Math.sin(elapsed * 1.3) * 0.2;
+    return {
+      phase,
+      segment: "ambient",
+      activeIndex: 0,
+      progress: (phase - 0.74) / 0.14,
+      doScan: true,
+      targetAim: lookRacks,
+      targetHaloY: 0.5,
+      targetHit: 0,
+      targetLight: 0.04,
+      targetPalletX: PALLET_OUT_X,
+      targetDoor: pulse,
+      snapIn: false,
+    };
+  }
+
+  const t = smootherstep((phase - 0.88) / 0.12);
   return {
     phase,
-    segment: "idle" as const,
+    segment: "swapIn",
     activeIndex: 0,
     progress: t,
-    targetAim: { x: c0.x, y, z: c0.z + c0.d / 2 },
-    targetHalo: {
-      x: THREE.MathUtils.lerp(fromH.x, toH.x, t),
-      y,
-      z: THREE.MathUtils.lerp(fromH.z, toH.z, t),
-      w: THREE.MathUtils.lerp(fromH.w, toH.w, t),
-      d: HALO_FACE_DEPTH,
-    },
+    doScan: true,
+    targetAim: HOLSTER,
+    targetHaloY: 0.5,
     targetHit: 0,
-    targetLight: THREE.MathUtils.lerp(0.35, 0.15, t),
+    targetLight: 0.08,
+    targetPalletX: THREE.MathUtils.lerp(PALLET_IN_X, 0, t),
+    targetDoor: 0.35,
+    snapIn: true,
   };
 }
 
-function dampClock(c: ScanClock, next: ReturnType<typeof sampleTargets>, delta: number) {
+function dampClock(c: ScanClock, next: Sample, delta: number) {
+  const enteringSwapIn = next.segment === "swapIn" && c.segment !== "swapIn";
   c.phase = next.phase;
   c.segment = next.segment;
   c.activeIndex = next.activeIndex;
   c.progress = next.progress;
+  c.doScan = next.doScan;
   c.targetAim = next.targetAim;
-  c.targetHalo = next.targetHalo;
+  c.targetHaloY = next.targetHaloY;
   c.targetHit = next.targetHit;
   c.targetLight = next.targetLight;
+  c.targetPalletX = next.targetPalletX;
+  c.targetDoor = next.targetDoor;
+  c.snapIn = next.snapIn;
 
-  const fast = next.segment === "slice" ? 14 : 9;
-  c.aimX = THREE.MathUtils.damp(c.aimX, next.targetAim.x, fast, delta);
-  c.aimY = THREE.MathUtils.damp(c.aimY, next.targetAim.y, fast, delta);
-  c.aimZ = THREE.MathUtils.damp(c.aimZ, next.targetAim.z, fast, delta);
-  c.haloX = THREE.MathUtils.damp(c.haloX, next.targetHalo.x, fast, delta);
-  c.haloY = THREE.MathUtils.damp(c.haloY, next.targetHalo.y, fast, delta);
-  c.haloZ = THREE.MathUtils.damp(c.haloZ, next.targetHalo.z, fast, delta);
-  c.haloW = THREE.MathUtils.damp(c.haloW, next.targetHalo.w, 10, delta);
-  c.haloD = THREE.MathUtils.damp(c.haloD, next.targetHalo.d, 10, delta);
-  c.hitStrength = THREE.MathUtils.damp(c.hitStrength, next.targetHit, 12, delta);
-  c.lightIntensity = THREE.MathUtils.damp(c.lightIntensity, next.targetLight, 8, delta);
+  if (enteringSwapIn) {
+    c.palletX = PALLET_IN_X;
+  }
+
+  const aimLambda =
+    next.segment === "slice"
+      ? 8
+      : next.segment === "ambient" || next.segment === "rest" || next.segment.startsWith("swap")
+        ? 4
+        : 5.5;
+  c.aimX = THREE.MathUtils.damp(c.aimX, next.targetAim.x, aimLambda, delta);
+  c.aimY = THREE.MathUtils.damp(c.aimY, next.targetAim.y, aimLambda, delta);
+  c.aimZ = THREE.MathUtils.damp(c.aimZ, next.targetAim.z, aimLambda, delta);
+  c.haloY = THREE.MathUtils.damp(c.haloY, next.targetHaloY, aimLambda, delta);
+  c.hitStrength = THREE.MathUtils.damp(c.hitStrength, next.targetHit, 7, delta);
+  c.lightIntensity = THREE.MathUtils.damp(c.lightIntensity, next.targetLight, 4.5, delta);
+  c.doorGlow = THREE.MathUtils.damp(c.doorGlow, next.targetDoor, 3.5, delta);
+  const pxLambda = next.segment === "swapOut" || next.segment === "swapIn" ? 4 : 5.5;
+  c.palletX = THREE.MathUtils.damp(c.palletX, next.targetPalletX, pxLambda, delta);
 }
 
 function initialClock(): ScanClock {
   const c0 = worldCenter(0);
-  const y = c0.y - c0.h / 2;
-  const h0 = frontHalo(0, y);
   return {
     phase: 0,
-    segment: "aim",
+    segment: "ambient",
     activeIndex: 0,
     progress: 0,
     hitStrength: 0,
-    targetAim: frontAim(0, y),
-    targetHalo: h0,
+    doScan: true,
+    targetAim: HOLSTER,
+    targetHaloY: c0.y,
     targetHit: 0,
-    targetLight: 0.2,
-    aimX: c0.x,
-    aimY: y,
-    aimZ: c0.z + c0.d / 2,
-    haloX: h0.x,
-    haloY: h0.y,
-    haloZ: h0.z,
-    haloW: h0.w,
-    haloD: h0.d,
-    lightIntensity: 0.2,
+    targetLight: 0.1,
+    targetPalletX: 0,
+    targetDoor: 0.35,
+    snapIn: false,
+    aimX: HOLSTER.x,
+    aimY: HOLSTER.y,
+    aimZ: HOLSTER.z,
+    haloY: c0.y,
+    lightIntensity: 0.1,
+    doorGlow: 0.35,
+    palletX: 0,
   };
 }
 
@@ -418,14 +587,20 @@ function Carton({
 }
 
 function PalletStack({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
+  const root = useRef<Group>(null);
   const labels = useRef<(MeshStandardMaterial | null)[]>([null, null, null, null]);
   const smoothHits = useRef([0, 0, 0, 0]);
 
   useFrame((_, delta) => {
-    const { activeIndex, hitStrength } = clockRef.current;
+    if (root.current) {
+      root.current.position.x = clockRef.current.palletX;
+    }
+    const { activeIndex, hitStrength, segment, doScan } = clockRef.current;
+    const scanning =
+      doScan && (segment === "slice" || segment === "hit" || segment === "approach");
     for (let i = 0; i < N; i++) {
-      const want = i === activeIndex ? hitStrength : 0;
-      smoothHits.current[i] = THREE.MathUtils.damp(smoothHits.current[i], want, 10, delta);
+      const want = scanning && i === activeIndex ? hitStrength : 0;
+      smoothHits.current[i] = THREE.MathUtils.damp(smoothHits.current[i], want, 8, delta);
       const mat = labels.current[i];
       if (!mat) continue;
       const s = smoothHits.current[i];
@@ -439,7 +614,7 @@ function PalletStack({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
   });
 
   return (
-    <group position={[0, 0, PALLET_Z]}>
+    <group ref={root} position={[0, 0, PALLET_Z]}>
       <WoodPallet position={[0, 0, 0]} />
       {PALLET_CARTONS.map((c, i) => (
         <Carton
@@ -457,38 +632,51 @@ function PalletStack({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
   );
 }
 
+const RACK_PALETTES = [
+  ["#3b82f6", "#60a5fa", "#93c5fd"],
+  ["#14b8a6", "#2dd4bf", "#5eead4"],
+  ["#f59e0b", "#fbbf24", "#fcd34d"],
+  ["#94a3b8", "#64748b", "#cbd5e1"],
+] as const;
+
 function SteelRack({
   position,
   side,
+  palette = 0,
 }: {
   position: [number, number, number];
   side: 1 | -1;
+  palette?: number;
 }) {
   const steel = "#8a9bb0";
   const post = "#4a5a6c";
-  const shelfYs = [0.42, 0.92, 1.42, 1.92] as const;
+  const shelfYs = [0.38, 0.82, 1.26] as const;
+  const postH = 1.45;
+  const shelfW = 0.58;
+  const shelfD = 0.55;
+  const colors = RACK_PALETTES[palette % RACK_PALETTES.length];
   const boxes: { shelf: number; size: [number, number, number]; color: string; z: number }[] = [
-    { shelf: 0, size: [0.42, 0.26, 0.36], color: "#3b82f6", z: -0.08 },
-    { shelf: 1, size: [0.38, 0.24, 0.34], color: "#14b8a6", z: 0.06 },
-    { shelf: 2, size: [0.4, 0.22, 0.32], color: "#f59e0b", z: -0.04 },
+    { shelf: 0, size: [0.36, 0.22, 0.32], color: colors[0], z: 0 },
+    { shelf: 1, size: [0.34, 0.2, 0.3], color: colors[1], z: 0.02 },
+    { shelf: 2, size: [0.35, 0.18, 0.28], color: colors[2], z: -0.02 },
   ];
 
   return (
     <group position={position}>
-      {([-0.32, 0.32] as const).map((z) => (
-        <mesh key={`p-${z}`} position={[0, 1.05, z]} castShadow>
-          <boxGeometry args={[0.07, 2.1, 0.07]} />
+      {([-0.22, 0.22] as const).map((z) => (
+        <mesh key={`p-${z}`} position={[0, postH / 2, z]} castShadow>
+          <boxGeometry args={[0.06, postH, 0.06]} />
           <meshStandardMaterial color={post} metalness={0.65} roughness={0.28} />
         </mesh>
       ))}
       {shelfYs.map((y) => (
         <group key={`shelf-${y}`}>
           <mesh position={[0, y, 0]} castShadow receiveShadow>
-            <boxGeometry args={[0.62, 0.04, 0.78]} />
+            <boxGeometry args={[shelfW, 0.035, shelfD]} />
             <meshStandardMaterial color={steel} metalness={0.55} roughness={0.32} />
           </mesh>
-          <mesh position={[side * 0.28, y + 0.03, 0]} castShadow>
-            <boxGeometry args={[0.03, 0.06, 0.78]} />
+          <mesh position={[side * (shelfW / 2 - 0.02), y + 0.025, 0]} castShadow>
+            <boxGeometry args={[0.025, 0.05, shelfD]} />
             <meshStandardMaterial color={post} metalness={0.6} roughness={0.3} />
           </mesh>
         </group>
@@ -500,9 +688,9 @@ function SteelRack({
           <RoundedBox
             key={`box-${i}`}
             args={b.size}
-            radius={0.014}
+            radius={0.012}
             smoothness={4}
-            position={[side * -0.02, shelfY + 0.02 + h / 2, b.z]}
+            position={[side * -0.02, shelfY + 0.018 + h / 2, b.z]}
             castShadow
             receiveShadow
           >
@@ -512,6 +700,69 @@ function SteelRack({
       })}
     </group>
   );
+}
+
+/** Pasillo de racks al fondo (ambos lados). */
+function WarehouseBay() {
+  const zs = [-1.35, -0.75, -0.2] as const;
+  return (
+    <group>
+      {zs.map((z, i) => (
+        <group key={`bay-${z}`}>
+          <SteelRack position={[-2.15 - i * 0.12, 0, z]} side={-1} palette={i} />
+          <SteelRack position={[2.15 + i * 0.12, 0, z]} side={1} palette={(i + 1) % 4} />
+        </group>
+      ))}
+      {/* fila extra más profunda */}
+      <SteelRack position={[-2.45, 0, -1.7]} side={-1} palette={3} />
+      <SteelRack position={[2.45, 0, -1.7]} side={1} palette={0} />
+    </group>
+  );
+}
+
+function CameraRig({
+  reduced,
+  compact,
+  clockRef,
+}: {
+  reduced: boolean;
+  compact: boolean;
+  clockRef: MutableRefObject<ScanClock>;
+}) {
+  const { camera } = useThree();
+  const look = useMemo(() => new THREE.Vector3(0, 0.65, PALLET_Z), []);
+  const desired = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((state, delta) => {
+    const baseX = compact ? 2.35 : 2.1;
+    const baseY = compact ? 1.65 : 1.42;
+    const baseZ = compact ? 3.05 : 2.75;
+
+    if (reduced) {
+      camera.position.set(baseX, baseY, baseZ);
+      look.set(0, 0.65, PALLET_Z);
+      camera.lookAt(look);
+      return;
+    }
+
+    const t = state.clock.elapsedTime;
+    const swayX = Math.sin(t * 0.12) * 0.1;
+    const swayZ = Math.cos(t * 0.1) * 0.06;
+    const breathY = Math.sin(t * 0.2) * 0.025;
+    const followY = THREE.MathUtils.clamp(clockRef.current.aimY * 0.18 + 0.55, 0.5, 0.8);
+
+    desired.set(baseX + swayX, baseY + breathY, baseZ + swayZ);
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, desired.x, 1.6, delta);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, desired.y, 1.6, delta);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, desired.z, 1.6, delta);
+
+    look.x = THREE.MathUtils.damp(look.x, clockRef.current.palletX * 0.12 + clockRef.current.aimX * 0.1, 1.5, delta);
+    look.y = THREE.MathUtils.damp(look.y, followY, 1.8, delta);
+    look.z = PALLET_Z;
+    camera.lookAt(look);
+  });
+
+  return null;
 }
 
 function HandScanner({
@@ -534,47 +785,47 @@ function HandScanner({
   const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   const lookDummy = useMemo(() => new THREE.Object3D(), []);
   const bobY = useRef(0);
-  const beamOpacity = useRef(0.25);
-  const impactScale = useRef(0.02);
+  const beamOpacity = useRef(0.2);
+  const impactScale = useRef(0.015);
 
   useFrame((state, delta) => {
     const gun = pivot.current;
     if (!gun) return;
 
-    const { aimX, aimY, aimZ, segment, hitStrength } = clockRef.current;
+    const { aimX, aimY, aimZ, segment, hitStrength, palletX } = clockRef.current;
     target.set(aimX, aimY, aimZ);
 
+    const resting =
+      segment === "ambient" ||
+      segment === "rest" ||
+      segment === "swapOut" ||
+      segment === "swapIn" ||
+      segment === "settle";
     const wantBob =
-      !reduced && segment === "idle" ? Math.sin(state.clock.elapsedTime * 1.1) * 0.014 : 0;
-    bobY.current = THREE.MathUtils.damp(bobY.current, wantBob, 4, delta);
+      !reduced && (segment === "rest" || segment === "ambient")
+        ? Math.sin(state.clock.elapsedTime * 0.7) * 0.008
+        : 0;
+    bobY.current = THREE.MathUtils.damp(bobY.current, wantBob, 3, delta);
     gun.position.set(GUN_BASE.x, GUN_BASE.y + bobY.current, GUN_BASE.z);
 
     lookDummy.position.copy(gun.position);
     lookDummy.lookAt(target);
-    gun.quaternion.slerp(lookDummy.quaternion, 1 - Math.exp(-6.5 * delta));
+    gun.quaternion.slerp(lookDummy.quaternion, 1 - Math.exp(-4.5 * delta));
 
     tipWorld.set(0, 0, -0.28).applyQuaternion(gun.quaternion).add(gun.position);
     const distToAim = Math.max(0.05, tipWorld.distanceTo(target));
     dir.subVectors(target, tipWorld).normalize();
 
-    // Clip al primer cartón en la línea de visión (no atraviesa)
-    const hitDist = firstCartonHit(
-      tipWorld.x,
-      tipWorld.y,
-      tipWorld.z,
-      dir.x,
-      dir.y,
-      dir.z,
-      distToAim,
-    );
-    const beamLen = Math.max(0.04, hitDist);
+    const hitDist = resting
+      ? distToAim
+      : firstCartonHit(tipWorld.x, tipWorld.y, tipWorld.z, dir.x, dir.y, dir.z, distToAim, palletX);
+    const beamLen = Math.max(0.04, Math.min(hitDist, resting ? 0.55 : hitDist));
     hitPoint.copy(tipWorld).addScaledVector(dir, beamLen);
     mid.lerpVectors(tipWorld, hitPoint, 0.5);
 
-    const active =
-      segment === "slice" || segment === "hit" || segment === "approach" ? 0.55 : 0.22;
-    const wantOp = active + hitStrength * 0.35;
-    beamOpacity.current = THREE.MathUtils.damp(beamOpacity.current, wantOp, 7, delta);
+    const active = segment === "slice" || segment === "hit" || segment === "approach";
+    const wantOp = (active ? 0.5 : resting ? 0.08 : 0.18) + hitStrength * 0.3;
+    beamOpacity.current = THREE.MathUtils.damp(beamOpacity.current, wantOp, 5, delta);
 
     const placeBeam = (mesh: Mesh | null, opacityMul: number) => {
       if (!mesh) return;
@@ -582,15 +833,17 @@ function HandScanner({
       mesh.quaternion.setFromUnitVectors(yAxis, dir);
       mesh.scale.set(1, beamLen, 1);
       (mesh.material as THREE.MeshBasicMaterial).opacity = beamOpacity.current * opacityMul;
+      mesh.visible = beamOpacity.current > 0.04;
     };
     placeBeam(beamCore.current, 1);
     placeBeam(beamGlow.current, 0.45);
 
     if (impact.current) {
       impact.current.position.copy(hitPoint);
-      const wantScale = 0.018 + hitStrength * 0.04 + (segment === "slice" ? 0.01 : 0);
-      impactScale.current = THREE.MathUtils.damp(impactScale.current, wantScale, 10, delta);
+      const wantScale = active ? 0.018 + hitStrength * 0.04 + (segment === "slice" ? 0.01 : 0) : 0.004;
+      impactScale.current = THREE.MathUtils.damp(impactScale.current, wantScale, 7, delta);
       impact.current.scale.setScalar(impactScale.current);
+      impact.current.visible = !resting && impactScale.current > 0.008;
       const mat = impact.current.material as THREE.MeshStandardMaterial;
       mat.emissiveIntensity = 0.8 + hitStrength * 2.2;
       mat.opacity = 0.55 + hitStrength * 0.4;
@@ -599,8 +852,8 @@ function HandScanner({
     if (screenMat.current) {
       screenMat.current.emissiveIntensity = THREE.MathUtils.damp(
         screenMat.current.emissiveIntensity,
-        0.75 + hitStrength * 1.6,
-        8,
+        resting ? 0.35 : 0.75 + hitStrength * 1.6,
+        5,
         delta,
       );
     }
@@ -633,7 +886,6 @@ function HandScanner({
         </mesh>
       </group>
 
-      {/* core fino */}
       <mesh ref={beamCore} renderOrder={2}>
         <cylinderGeometry args={[0.006, 0.0025, 1, 10]} />
         <meshBasicMaterial
@@ -645,7 +897,6 @@ function HandScanner({
           toneMapped={false}
         />
       </mesh>
-      {/* glow exterior */}
       <mesh ref={beamGlow} renderOrder={1}>
         <cylinderGeometry args={[0.018, 0.008, 1, 12]} />
         <meshBasicMaterial
@@ -657,7 +908,6 @@ function HandScanner({
           toneMapped={false}
         />
       </mesh>
-      {/* impacto en la superficie */}
       <mesh ref={impact} renderOrder={3}>
         <sphereGeometry args={[1, 12, 12]} />
         <meshStandardMaterial
@@ -674,74 +924,117 @@ function HandScanner({
   );
 }
 
-/** Halo ámbar que morph hacia el tamaño/posición de la caja activa + pointLight. */
+/** Halo en L: cara frontal + cara derecha de la caja activa. */
 function ScanHalo({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
-  const meshRef = useRef<Mesh>(null);
+  const frontRef = useRef<Mesh>(null);
+  const sideRef = useRef<Mesh>(null);
   const lightRef = useRef<PointLight>(null);
-  const smoothOp = useRef(0.25);
-  const smoothEm = useRef(0.6);
+  const smoothOp = useRef(0.2);
+  const smoothEm = useRef(0.5);
+  const smoothBox = useRef({ x: 0, z: PALLET_Z, w: 0.4, d: 0.4 });
 
   useFrame((_, delta) => {
     const c = clockRef.current;
-    const mesh = meshRef.current;
-    if (mesh) {
-      mesh.position.set(c.haloX, c.haloY, c.haloZ);
-      // unit box 1×1×1 → scale to carton footprint × thickness
-      mesh.scale.set(c.haloW, HALO_THICKNESS, c.haloD);
+    const scanning =
+      c.segment === "slice" || c.segment === "hit" || c.segment === "approach";
+    const box = worldCenter(c.activeIndex, c.palletX);
+    const sb = smoothBox.current;
+    sb.x = THREE.MathUtils.damp(sb.x, box.x, 8, delta);
+    sb.z = THREE.MathUtils.damp(sb.z, box.z, 8, delta);
+    sb.w = THREE.MathUtils.damp(sb.w, box.w, 8, delta);
+    sb.d = THREE.MathUtils.damp(sb.d, box.d, 8, delta);
+    const y = c.haloY;
+
+    const boost =
+      c.segment === "slice" || c.segment === "hit"
+        ? 0.2
+        : c.segment === "approach"
+          ? 0.08
+          : 0;
+    const wantEm = scanning ? 0.45 + boost + c.hitStrength * 1.3 : 0.05;
+    const wantOp = scanning ? 0.2 + boost + c.hitStrength * 0.28 : 0.02;
+    smoothEm.current = THREE.MathUtils.damp(smoothEm.current, wantEm, 6, delta);
+    smoothOp.current = THREE.MathUtils.damp(smoothOp.current, wantOp, 6, delta);
+
+    const applyMat = (mesh: Mesh | null) => {
+      if (!mesh) return;
+      mesh.visible = scanning && smoothOp.current > 0.05;
       const mat = mesh.material as MeshStandardMaterial;
-      const boost =
-        c.segment === "slice" || c.segment === "hit"
-          ? 0.2
-          : c.segment === "approach"
-            ? 0.08
-            : 0;
-      const wantEm = 0.45 + boost + c.hitStrength * 1.4;
-      const wantOp = 0.18 + boost + c.hitStrength * 0.28;
-      smoothEm.current = THREE.MathUtils.damp(smoothEm.current, wantEm, 9, delta);
-      smoothOp.current = THREE.MathUtils.damp(smoothOp.current, wantOp, 9, delta);
       mat.emissiveIntensity = smoothEm.current;
       mat.opacity = smoothOp.current;
+    };
+
+    if (frontRef.current) {
+      frontRef.current.position.set(sb.x, y, sb.z + sb.d / 2);
+      frontRef.current.scale.set(sb.w * 1.06, HALO_THICKNESS, HALO_FACE_DEPTH);
+      applyMat(frontRef.current);
+    }
+    if (sideRef.current) {
+      // cara derecha (+X)
+      sideRef.current.position.set(sb.x + sb.w / 2, y, sb.z);
+      sideRef.current.scale.set(HALO_FACE_DEPTH, HALO_THICKNESS, sb.d * 1.06);
+      applyMat(sideRef.current);
     }
     if (lightRef.current) {
-      lightRef.current.position.set(c.haloX, c.haloY + 0.06, c.haloZ + 0.08);
-      lightRef.current.intensity = c.lightIntensity;
+      lightRef.current.position.set(sb.x + sb.w * 0.25, y + 0.05, sb.z + sb.d * 0.35);
+      lightRef.current.intensity = scanning ? c.lightIntensity : 0;
     }
   });
 
+  const haloMat = (
+    <meshStandardMaterial
+      color="#fbbf24"
+      emissive="#f59e0b"
+      emissiveIntensity={0.5}
+      transparent
+      opacity={0.2}
+      depthWrite={false}
+      toneMapped={false}
+    />
+  );
+
   return (
     <>
-      <mesh ref={meshRef}>
+      <mesh ref={frontRef}>
+        <boxGeometry args={[1, 1, 1]} />
+        {haloMat}
+      </mesh>
+      <mesh ref={sideRef}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           color="#fbbf24"
           emissive="#f59e0b"
-          emissiveIntensity={0.6}
+          emissiveIntensity={0.5}
           transparent
-          opacity={0.25}
+          opacity={0.2}
           depthWrite={false}
           toneMapped={false}
         />
       </mesh>
-      <pointLight
-        ref={lightRef}
-        color="#fbbf24"
-        intensity={0.2}
-        distance={2.2}
-        decay={2}
-      />
+      <pointLight ref={lightRef} color="#fbbf24" intensity={0.15} distance={2.2} decay={2} />
     </>
   );
 }
 
-function DockDoor() {
+function DockDoor({ clockRef }: { clockRef: MutableRefObject<ScanClock> }) {
+  const panel = useRef<MeshStandardMaterial>(null);
+
+  useFrame(() => {
+    if (!panel.current) return;
+    const g = clockRef.current.doorGlow;
+    panel.current.emissiveIntensity = 0.25 + g * 0.7;
+    panel.current.opacity = 0.4 + g * 0.35;
+  });
+
   return (
-    <group position={[0, 1.15, -1.55]}>
-      <RoundedBox args={[2.5, 2.4, 0.12]} radius={0.02} castShadow>
+    <group position={[0, 1.15, -1.85]}>
+      <RoundedBox args={[2.8, 2.4, 0.12]} radius={0.02} castShadow>
         <meshStandardMaterial color="#1a2740" roughness={0.85} metalness={0.1} />
       </RoundedBox>
       <mesh position={[0, 0.05, 0.07]}>
-        <planeGeometry args={[1.75, 1.85]} />
+        <planeGeometry args={[1.9, 1.85]} />
         <meshStandardMaterial
+          ref={panel}
           color="#2563eb"
           emissive="#1d4ed8"
           emissiveIntensity={0.35}
@@ -757,18 +1050,18 @@ function ConcreteFloor() {
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0.2]} receiveShadow>
-        <planeGeometry args={[14, 14]} />
+        <planeGeometry args={[16, 16]} />
         <meshStandardMaterial color="#152536" roughness={0.96} metalness={0.04} />
       </mesh>
       {([-2.4, -0.8, 0.8, 2.4] as const).map((x) => (
         <mesh key={`jx-${x}`} rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.005, 0.2]}>
-          <planeGeometry args={[0.015, 8]} />
+          <planeGeometry args={[0.015, 10]} />
           <meshStandardMaterial color="#1a3048" roughness={1} />
         </mesh>
       ))}
       {([-2.4, -0.8, 0.8, 2.4] as const).map((z) => (
         <mesh key={`jz-${z}`} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, z]}>
-          <planeGeometry args={[8, 0.015]} />
+          <planeGeometry args={[10, 0.015]} />
           <meshStandardMaterial color="#1a3048" roughness={1} />
         </mesh>
       ))}
@@ -797,7 +1090,7 @@ function SceneContent({ reduced, compact }: { reduced: boolean; compact: boolean
       <RenderTune />
       <SoftShadows size={18} samples={12} focus={0.85} />
       <color attach="background" args={["#0b1a2e"]} />
-      <fog attach="fog" args={["#0b1a2e", 12, 26]} />
+      <fog attach="fog" args={["#0b1a2e", 11, 28]} />
 
       <ScanClockDriver clockRef={clockRef} reduced={reduced} />
 
@@ -809,11 +1102,11 @@ function SceneContent({ reduced, compact }: { reduced: boolean; compact: boolean
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-camera-near={1}
-        shadow-camera-far={18}
-        shadow-camera-left={-5}
-        shadow-camera-right={5}
-        shadow-camera-top={5}
-        shadow-camera-bottom={-5}
+        shadow-camera-far={20}
+        shadow-camera-left={-6}
+        shadow-camera-right={6}
+        shadow-camera-top={6}
+        shadow-camera-bottom={-6}
         shadow-bias={-0.0002}
       />
       <directionalLight position={[-3, 2.5, -1.8]} intensity={0.45} color="#93c5fd" />
@@ -829,13 +1122,8 @@ function SceneContent({ reduced, compact }: { reduced: boolean; compact: boolean
       <Environment preset="warehouse" environmentIntensity={0.28} />
 
       <ConcreteFloor />
-
-      <SteelRack position={[-1.5, 0, 0.15]} side={-1} />
-      <SteelRack position={[1.5, 0, 0.15]} side={1} />
-      <SteelRack position={[-1.5, 0, 1.25]} side={-1} />
-      <SteelRack position={[1.5, 0, 1.25]} side={1} />
-
-      <DockDoor />
+      <WarehouseBay />
+      <DockDoor clockRef={clockRef} />
       <PalletStack clockRef={clockRef} />
       <HandScanner clockRef={clockRef} reduced={reduced} />
       <ScanHalo clockRef={clockRef} />
@@ -843,24 +1131,13 @@ function SceneContent({ reduced, compact }: { reduced: boolean; compact: boolean
       <ContactShadows
         position={[0, 0.01, 0.35]}
         opacity={0.45}
-        scale={9}
+        scale={10}
         blur={3.2}
         far={5}
         resolution={1024}
       />
 
-      <OrbitControls
-        makeDefault
-        enableZoom={false}
-        enablePan={false}
-        autoRotate
-        autoRotateSpeed={compact ? 0.18 : 0.28}
-        enableDamping
-        dampingFactor={0.06}
-        minPolarAngle={Math.PI / 3.05}
-        maxPolarAngle={Math.PI / 2.18}
-        target={[0, 0.65, PALLET_Z]}
-      />
+      <CameraRig reduced={reduced} compact={compact} clockRef={clockRef} />
     </>
   );
 }
@@ -885,10 +1162,10 @@ export function OutboundScene({ compact = false }: { compact?: boolean }) {
         shadows
         dpr={[1, 2]}
         camera={{
-          position: compact ? [2.5, 1.85, 3.1] : [2.25, 1.55, 2.85],
-          fov: compact ? 44 : 38,
-          near: 0.1,
-          far: 50,
+          position: compact ? [2.35, 1.65, 3.05] : [2.1, 1.42, 2.75],
+          fov: compact ? 42 : 36,
+          near: 0.25,
+          far: 40,
         }}
         gl={{
           antialias: true,
