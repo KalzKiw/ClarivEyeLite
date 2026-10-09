@@ -1,5 +1,11 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.7 — 2026-10-09
+
+### Login — loop de scan sincronizado
+- Ciclo ~4.5 s: apuntar → barrer → hit → idle; pistola `lookAt` al pallet, haz y volumen con la misma `scanY`.
+- Sin Float; flash emissive en etiqueta al “leer”; auto-rotate más lento.
+
 ## 0.3.6 — 2026-10-09
 
 ### Login — diorama 3D legible
