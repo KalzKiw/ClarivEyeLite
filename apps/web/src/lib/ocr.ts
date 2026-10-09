@@ -3,6 +3,7 @@ import {
   businessProfileToBands,
   detectProfile,
   extractAssistedCandidates,
+  buildColumnRowsFromTexts,
   parseAnyDocument,
   parseColumnBundle,
   passesQualityGate,
@@ -224,6 +225,7 @@ async function scanColumns(
       });
 
       const joined = `${headerText}\n${skuText}\n${descText}\n${numsText}\n${fullText}`;
+      const rows = buildColumnRowsFromTexts(skuText, descText, numsText);
       const fromColumns = withCleanLines(
         parseColumnBundle({
           headerText,
@@ -231,6 +233,7 @@ async function scanColumns(
           descText,
           numsText,
           fullText: joined,
+          rows,
         }),
       );
       const fromProfile = parseFromText(joined, profile);

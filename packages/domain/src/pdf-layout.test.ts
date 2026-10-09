@@ -116,6 +116,24 @@ describe("pdf-layout", () => {
     expect(doc.raw_text.length).toBeGreaterThan(20);
   });
 
+  it("layout emite rows[] con afinidad Y (sku+desc+nums misma fila)", () => {
+    const layout = layoutPdfItems(tosmaItems());
+    expect(layout.columnBundle.rows?.length).toBeGreaterThanOrEqual(3);
+    const row113 = layout.columnBundle.rows!.find(
+      (r) => /000113/.test(`${r.sku} ${r.desc} ${r.nums}`),
+    );
+    expect(row113).toBeTruthy();
+    // Misma fila geométrica: código + nombre + qty co-ocurren (aunque el corte X varíe)
+    const joined = `${row113!.sku} ${row113!.desc} ${row113!.nums}`;
+    expect(joined).toMatch(/000113/);
+    expect(joined).toMatch(/Válvula|Valvula/i);
+    expect(joined).toMatch(/20/);
+    const doc = parseColumnBundle(layout.columnBundle);
+    expect(doc.lines.map((l) => l.reference)).toEqual(
+      expect.arrayContaining(["000113", "77", "000107"]),
+    );
+  });
+
   it("Tosma geométrico conserva códigos y parsea", () => {
     const layout = layoutPdfItems(tosmaItems());
     expect(layout.text).toMatch(/000113/);

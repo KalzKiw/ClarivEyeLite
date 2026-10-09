@@ -1,5 +1,12 @@
 # Changelog — ClarivEye Lite
 
+## 0.3.19 — 2026-10-09
+
+### Motor lectura — filas afines
+- `pdf-layout` emite `rows[]` (SKU+desc+nums por Y); `parseColumnBundle` las prioriza.
+- OCR `scanColumns` construye filas con `buildColumnRowsFromTexts`; blobs con `alignToSlots`.
+- Códigos cortos Tosma (`77`) y fixtures skew; 36 tests domain.
+
 ## 0.3.18 — 2026-10-09
 
 ### Parse — multi-formato más robusto

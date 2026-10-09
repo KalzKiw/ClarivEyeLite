@@ -3,7 +3,7 @@
  * pdf.js da transform[4]=x, transform[5]=y (origen abajo-izquierda).
  */
 
-import type { ColumnOcrBundle } from "./column-merge";
+import type { ColumnOcrBundle, ColumnTableRow } from "./column-merge";
 
 export type PdfTextItem = {
   str: string;
@@ -88,16 +88,28 @@ function findColumnCuts(xs: number[]): [number, number] {
   ];
 }
 
-function splitColumns(rows: Placed[][]): { sku: string[]; desc: string[]; nums: string[] } {
+function splitColumns(rows: Placed[][]): {
+  sku: string[];
+  desc: string[];
+  nums: string[];
+  tableRows: ColumnTableRow[];
+} {
   const xs = rows.flat().map((i) => i.x);
   if (xs.length < 3) {
-    return { sku: [], desc: rows.map(joinRow).filter(Boolean), nums: [] };
+    const desc = rows.map(joinRow).filter(Boolean);
+    return {
+      sku: [],
+      desc,
+      nums: [],
+      tableRows: desc.map((d) => ({ sku: "", desc: d, nums: "" })),
+    };
   }
   const [q1, q2] = findColumnCuts(xs);
 
   const sku: string[] = [];
   const desc: string[] = [];
   const nums: string[] = [];
+  const tableRows: ColumnTableRow[] = [];
 
   for (const row of rows) {
     const left: Placed[] = [];
@@ -115,8 +127,9 @@ function splitColumns(rows: Placed[][]): { sku: string[]; desc: string[]; nums: 
     sku.push(s);
     desc.push(d);
     nums.push(n);
+    tableRows.push({ sku: s, desc: d, nums: n });
   }
-  return { sku, desc, nums };
+  return { sku, desc, nums, tableRows };
 }
 
 /**
@@ -192,6 +205,7 @@ export function layoutPdfItems(
     descText: cols.desc.join("\n"),
     numsText: cols.nums.join("\n"),
     fullText: text,
+    rows: cols.tableRows,
   };
 
   return { text, lines, columnBundle };
