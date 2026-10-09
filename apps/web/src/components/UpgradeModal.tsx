@@ -105,7 +105,7 @@ export function UpgradeModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="upgrade-title"
@@ -117,184 +117,182 @@ export function UpgradeModal({
         onClick={onClose}
       />
 
-      <div className="relative z-10 flex max-h-[96dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:rounded-3xl">
-        {/* Cabecera pricing */}
-        <div
-          className="relative shrink-0 overflow-hidden px-5 pb-5 pt-5 sm:px-7 sm:pt-6"
-          style={{
-            background: "linear-gradient(135deg, #4c1d95 0%, #6d28d9 42%, #a21caf 100%)",
-          }}
-        >
+      {/* Sheet: en móvil altura limitada + scroll interno; sin capas absolutas que se pisen */}
+      <div className="relative z-10 flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl bg-[#faf8ff] shadow-2xl shadow-violet-950/40 sm:max-h-[90dvh] sm:rounded-3xl">
+        <div className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-violet-200 sm:hidden" aria-hidden />
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          {/* Cabecera compacta */}
           <div
-            className="pointer-events-none absolute inset-0 opacity-30"
+            className="relative px-4 pb-4 pt-3 sm:px-7 sm:pb-5 sm:pt-6"
             style={{
-              backgroundImage:
-                "radial-gradient(circle at 12% 80%, #f0abfc 0%, transparent 40%), radial-gradient(circle at 90% 10%, #c4b5fd 0%, transparent 35%)",
+              background: "linear-gradient(135deg, #4c1d95 0%, #6d28d9 42%, #a21caf 100%)",
             }}
-            aria-hidden
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-3 top-3 z-20 rounded-full bg-white/15 p-2 text-white transition hover:bg-white/25"
-            aria-label="Cerrar"
           >
-            <X size={18} />
-          </button>
-
-          <div className="relative flex items-start gap-3 pr-10 sm:gap-4">
-            <BoxMascot mood="wow" className="h-[72px] w-[66px] shrink-0 drop-shadow-lg sm:h-[88px] sm:w-[80px]" />
-            <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-                <Package size={12} />
-                Planes ClarivEye
-              </div>
-              <h2
-                id="upgrade-title"
-                className="font-display mt-2 text-[1.55rem] font-semibold leading-tight tracking-tight text-white sm:text-3xl"
-              >
-                Elige Free o Pro
-              </h2>
-              <p className="mt-1.5 max-w-md text-sm leading-relaxed text-white/90">
-                Cupo Free lleno. Compara y desbloquea la salida sin tope.
-              </p>
-              <div className="mt-4 max-w-xs">
-                <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-white/85">
-                  <span>Pedidos abiertos</span>
-                  <span>
-                    {used}/{FREE_OPEN_LIMIT}
-                  </span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-black/25">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-[#fce7f3] to-[#f0abfc] transition-all duration-500"
-                    style={{ width: `${fill}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
-          <div className="mb-5 flex flex-col items-center gap-2">
-            <div
-              className="inline-flex rounded-full border border-violet-200 bg-white p-1 shadow-sm"
-              role="group"
-              aria-label="Periodo de facturación"
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-3 top-3 z-10 rounded-full bg-white/15 p-2 text-white transition hover:bg-white/25"
+              aria-label="Cerrar"
             >
-              <button
-                type="button"
-                onClick={() => setBilling("monthly")}
-                className={cn(
-                  "rounded-full px-5 py-2 text-xs font-bold transition",
-                  billing === "monthly"
-                    ? "bg-zinc-900 text-white shadow"
-                    : "text-zinc-600 hover:text-zinc-900",
-                )}
-              >
-                Mensual
-              </button>
-              <button
-                type="button"
-                onClick={() => setBilling("annual")}
-                className={cn(
-                  "rounded-full px-5 py-2 text-xs font-bold transition",
-                  billing === "annual"
-                    ? "bg-violet-700 text-white shadow"
-                    : "text-zinc-600 hover:text-zinc-900",
-                )}
-              >
-                Anual
-                <span
-                  className={cn(
-                    "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold",
-                    billing === "annual" ? "bg-fuchsia-200 text-fuchsia-900" : "bg-violet-100 text-violet-700",
-                  )}
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 pr-10">
+              <BoxMascot mood="wow" className="h-14 w-[52px] shrink-0 drop-shadow-md sm:h-[72px] sm:w-[66px]" />
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+                  <Package size={12} />
+                  Planes ClarivEye
+                </div>
+                <h2
+                  id="upgrade-title"
+                  className="mt-1.5 text-xl font-semibold leading-tight tracking-tight text-white sm:text-2xl"
                 >
-                  −34%
-                </span>
-              </button>
-            </div>
-            <p className="text-[11px] font-medium text-zinc-500">{price.billed}</p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-zinc-500">Free</p>
-              <p className="font-display mt-2 text-4xl font-semibold tracking-tight text-zinc-900">
-                0 €
-                <span className="text-base font-semibold text-zinc-500"> /siempre</span>
-              </p>
-              <p className="mt-1 text-sm font-medium text-zinc-600">Ideal para probar el picking</p>
-              <ul className="mt-5 flex-1 space-y-3">
-                {FREE_FEATURES.map((f) => (
-                  <FeatureRow key={f.label} ok={f.ok} label={f.label} />
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={onClose}
-                className="mt-6 w-full rounded-xl border-2 border-zinc-200 bg-zinc-50 py-3 text-sm font-bold text-zinc-800 transition hover:border-zinc-300 hover:bg-white"
-              >
-                Seguir en Free
-              </button>
+                  Elige Free o Pro
+                </h2>
+                <p className="mt-1 text-sm leading-snug text-white/90">
+                  Cupo Free lleno. Compara y desbloquea sin tope.
+                </p>
+              </div>
             </div>
 
-            <div
-              className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-violet-600 p-5 shadow-lg shadow-violet-900/15"
-              style={{
-                background: "linear-gradient(165deg, #5b21b6 0%, #6d28d9 55%, #86198f 100%)",
-              }}
-            >
-              <div
-                className="pointer-events-none absolute -right-10 top-0 size-40 rounded-full bg-fuchsia-400/25 blur-3xl"
-                aria-hidden
-              />
-              <div className="relative flex items-center justify-between gap-2">
-                <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">Pro</p>
-                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-violet-800">
-                  <Sparkles size={11} />
-                  Recomendado
+            <div className="mt-3">
+              <div className="mb-1.5 flex justify-between text-[11px] font-semibold text-white/85">
+                <span>Pedidos abiertos</span>
+                <span>
+                  {used}/{FREE_OPEN_LIMIT}
                 </span>
               </div>
-              <p className="font-display relative mt-2 text-4xl font-semibold tracking-tight text-white">
-                {price.amount} €
-                <span className="text-base font-semibold text-white/85"> /{price.period}</span>
-              </p>
-              <p className="relative mt-1 text-sm font-semibold text-fuchsia-100">{price.note}</p>
-              <ul className="relative mt-5 flex-1 space-y-3">
-                {PRO_FEATURES.map((f) => (
-                  <FeatureRow key={f.label} ok={f.ok} label={f.label} onDark />
-                ))}
-              </ul>
-              {isOwner ? (
+              <div className="h-2 overflow-hidden rounded-full bg-black/25">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#fce7f3] to-[#f0abfc] transition-all duration-500"
+                  style={{ width: `${fill}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 px-4 py-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:px-7 sm:py-6">
+            <div className="flex flex-col items-center gap-2">
+              <div
+                className="inline-flex rounded-full border border-violet-200 bg-white p-1 shadow-sm"
+                role="group"
+                aria-label="Periodo de facturación"
+              >
                 <button
                   type="button"
-                  onClick={goPro}
-                  className="relative mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-extrabold text-violet-900 shadow-md transition active:scale-[0.98] hover:bg-fuchsia-50"
+                  onClick={() => setBilling("monthly")}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-xs font-semibold transition sm:px-5",
+                    billing === "monthly"
+                      ? "bg-zinc-900 text-white shadow"
+                      : "text-zinc-600 hover:text-zinc-900",
+                  )}
                 >
-                  <Zap size={16} fill="currentColor" />
-                  Activar Pro {billing === "annual" ? "anual" : "mensual"}
+                  Mensual
                 </button>
-              ) : (
-                <p className="relative mt-6 rounded-xl bg-black/20 px-3 py-2.5 text-center text-xs font-semibold text-white">
-                  Pide al dueño del negocio que active Pro en Ajustes.
-                </p>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setBilling("annual")}
+                  className={cn(
+                    "rounded-full px-4 py-2 text-xs font-semibold transition sm:px-5",
+                    billing === "annual"
+                      ? "bg-violet-700 text-white shadow"
+                      : "text-zinc-600 hover:text-zinc-900",
+                  )}
+                >
+                  Anual
+                  <span
+                    className={cn(
+                      "ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                      billing === "annual"
+                        ? "bg-fuchsia-200 text-fuchsia-900"
+                        : "bg-violet-100 text-violet-700",
+                    )}
+                  >
+                    −34%
+                  </span>
+                </button>
+              </div>
+              <p className="text-[11px] font-medium text-zinc-500">{price.billed}</p>
             </div>
-          </div>
 
-          <p className="mt-5 text-center text-[11px] font-medium text-zinc-500">
-            Demo local · sin cobro real todavía ·{" "}
-            <Link
-              to="/ajustes"
-              onClick={onClose}
-              className="font-bold text-violet-700 underline-offset-2 hover:underline"
-            >
-              Ir a Ajustes
-            </Link>
-          </p>
+            {/* Móvil: columna (Pro primero). Desktop: 2 columnas lado a lado */}
+            <div className="flex flex-col gap-3 sm:grid sm:grid-cols-2 sm:gap-4">
+              {/* Pro primero en móvil */}
+              <div
+                className="relative order-1 flex flex-col rounded-2xl border-2 border-violet-600 p-4 sm:order-2 sm:p-5"
+                style={{
+                  background: "linear-gradient(165deg, #5b21b6 0%, #6d28d9 55%, #86198f 100%)",
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white">Pro</p>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-violet-800">
+                    <Sparkles size={11} />
+                    Recomendado
+                  </span>
+                </div>
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                  {price.amount} €
+                  <span className="text-base font-semibold text-white/85"> /{price.period}</span>
+                </p>
+                <p className="mt-1 text-sm font-medium text-fuchsia-100">{price.note}</p>
+                <ul className="mt-4 space-y-2.5">
+                  {PRO_FEATURES.map((f) => (
+                    <FeatureRow key={f.label} ok={f.ok} label={f.label} onDark />
+                  ))}
+                </ul>
+                {isOwner ? (
+                  <button
+                    type="button"
+                    onClick={goPro}
+                    className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-bold text-violet-900 shadow-md transition active:scale-[0.98] hover:bg-fuchsia-50"
+                  >
+                    <Zap size={16} fill="currentColor" />
+                    Activar Pro {billing === "annual" ? "anual" : "mensual"}
+                  </button>
+                ) : (
+                  <p className="mt-5 rounded-xl bg-black/20 px-3 py-2.5 text-center text-xs font-medium text-white">
+                    Pide al dueño del negocio que active Pro en Ajustes.
+                  </p>
+                )}
+              </div>
+
+              <div className="order-2 flex flex-col rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:order-1 sm:p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-500">Free</p>
+                <p className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
+                  0 €
+                  <span className="text-base font-semibold text-zinc-500"> /siempre</span>
+                </p>
+                <p className="mt-1 text-sm font-medium text-zinc-600">Ideal para probar el picking</p>
+                <ul className="mt-4 space-y-2.5">
+                  {FREE_FEATURES.map((f) => (
+                    <FeatureRow key={f.label} ok={f.ok} label={f.label} />
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mt-5 w-full rounded-xl border-2 border-zinc-200 bg-zinc-50 py-3 text-sm font-semibold text-zinc-800 transition hover:border-zinc-300 hover:bg-white"
+                >
+                  Seguir en Free
+                </button>
+              </div>
+            </div>
+
+            <p className="text-center text-[11px] font-medium text-zinc-500">
+              Demo local · sin cobro real todavía ·{" "}
+              <Link
+                to="/ajustes"
+                onClick={onClose}
+                className="font-semibold text-violet-700 underline-offset-2 hover:underline"
+              >
+                Ir a Ajustes
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
