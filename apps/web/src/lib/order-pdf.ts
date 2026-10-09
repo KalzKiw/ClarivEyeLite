@@ -123,11 +123,61 @@ function ensureY(doc: jsPDF, y: number, need: number): number {
   return MARGIN + 6;
 }
 
+/** Logo oficial ClarivEye (mismo asset que ClarivEye Oficial / privado). */
+async function loadLogoDataUrl(): Promise<string | null> {
+  try {
+    const response = await fetch("/icons/logopdf.png");
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+function drawTotalsBox(
+  doc: jsPDF,
+  y: number,
+  rows: Array<{ label: string; value: string; emphasize?: boolean }>,
+): number {
+  const boxW = 78;
+  const rowH = 8;
+  const padX = 5;
+  const padY = 4;
+  const boxH = padY * 2 + rows.length * rowH;
+  const boxX = CONTENT_RIGHT - boxW;
+
+  doc.setFillColor(250, 250, 252);
+  doc.setDrawColor(220, 220, 225);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(boxX, y, boxW, boxH, 2, 2, "FD");
+
+  rows.forEach((row, i) => {
+    const rowMidY = y + padY + i * rowH + rowH / 2 + 1.2;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    doc.text(row.label, boxX + padX, rowMidY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(row.emphasize ? 10 : 9);
+    doc.setTextColor(...(row.emphasize ? PRIMARY : INK));
+    doc.text(row.value, boxX + boxW - padX, rowMidY, { align: "right" });
+  });
+
+  return y + boxH + 6;
+}
+
 /** PDF A4: orden de picking + comprobante del pedido. */
 export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   const token = encodeOrderToken(order.id);
   const barcodeImg = code128DataUrl(token, 48);
   const qrImg = await qrDataUrl(token, 110);
+  const logoImg = await loadLogoDataUrl();
   const businessName = opts?.businessName?.trim() || "Negocio";
   const printedAt = fmtDate(new Date().toISOString());
 
@@ -144,23 +194,35 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
   let y = MARGIN;
 
   // —— Cabecera ——
+  const headerH = 30;
   doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, PAGE_W, 28, "F");
+  doc.rect(0, 0, PAGE_W, headerH, "F");
+
+  const logoSize = 18;
+  let textLeft = MARGIN;
+  if (logoImg) {
+    // Fondo blanco suave detrás del logo para que se lea bien sobre azul
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(MARGIN - 1, 6, logoSize + 2, logoSize + 2, 2, 2, "F");
+    doc.addImage(logoImg, "PNG", MARGIN, 7, logoSize, logoSize);
+    textLeft = MARGIN + logoSize + 5;
+  }
+
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
-  doc.text("ClarivEye Lite", MARGIN, 12);
+  doc.text("ClarivEye Lite", textLeft, 13);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
-  doc.text("Orden de picking / Comprobante", MARGIN, 19);
+  doc.text("Orden de picking / Comprobante", textLeft, 20);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(businessName, CONTENT_RIGHT, 12, { align: "right" });
+  doc.text(businessName, CONTENT_RIGHT, 13, { align: "right" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, 19, { align: "right" });
+  doc.text(`Impreso: ${printedAt}`, CONTENT_RIGHT, 20, { align: "right" });
 
-  y = 36;
+  y = headerH + 10;
   doc.setTextColor(...INK);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
@@ -291,33 +353,16 @@ export async function downloadOrderPdf(order: Order, opts?: OrderPdfOptions) {
 
   y = lastTableY(doc) + 8;
 
-  // —— Totales ——
-  y = ensureY(doc, y, 28);
-  const totalsX = CONTENT_RIGHT - 70;
-  doc.setFillColor(250, 250, 252);
-  doc.setDrawColor(220, 220, 225);
-  doc.roundedRect(totalsX - 4, y - 4, 74, hasPrices ? 28 : 20, 2, 2, "FD");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(...MUTED);
-  doc.text("Total unidades", totalsX, y + 2);
-  doc.text("Total bultos", totalsX, y + 8);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...INK);
-  doc.text(String(totalQty), CONTENT_RIGHT, y + 2, { align: "right" });
-  doc.text(String(totalPkg), CONTENT_RIGHT, y + 8, { align: "right" });
+  // —— Totales (etiqueta izq + valor dcha, filas alineadas) ——
+  const totalRows: Array<{ label: string; value: string; emphasize?: boolean }> = [
+    { label: "Total unidades", value: String(totalQty) },
+    { label: "Total bultos", value: String(totalPkg) },
+  ];
   if (hasPrices && totalAmount !== null) {
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...MUTED);
-    doc.text("Importe", totalsX, y + 16);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...PRIMARY);
-    doc.text(fmtMoney(totalAmount), CONTENT_RIGHT, y + 16, { align: "right" });
-    y += 30;
-  } else {
-    y += 22;
+    totalRows.push({ label: "Importe", value: fmtMoney(totalAmount), emphasize: true });
   }
+  y = ensureY(doc, y, 8 + totalRows.length * 8 + 10);
+  y = drawTotalsBox(doc, y, totalRows);
 
   // —— Anexo barcodes compacto ——
   if (order.lines.length > 0) {
