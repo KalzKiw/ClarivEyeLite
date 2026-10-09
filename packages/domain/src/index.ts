@@ -3,6 +3,7 @@ export * from "./clarivscan-parser";
 export * from "./column-merge";
 export * from "./document-parser";
 export * from "./document-profiles";
+export * from "./es-postal";
 export * from "./line-audit";
 export * from "./line-role";
 export * from "./orders";

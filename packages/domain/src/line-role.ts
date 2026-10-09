@@ -4,6 +4,7 @@
  */
 
 import type { DocumentLine } from "./document-parser";
+import { isSpanishPostalCode, postalMatchesPlaceName } from "./es-postal";
 
 export type LineRole = "product" | "phone" | "address" | "prose" | "meta" | "unknown";
 
@@ -184,7 +185,16 @@ export function productScore(line: DocumentLine): number {
   const refClass = classifyText(ref);
   const nameClass = name ? classifyText(name) : null;
 
-  // CP (exactamente 5 dígitos) + localidad → dirección partida en columnas, no SKU
+  // CP español (prefijo provincia 01–52) + localidad / CCAA / “España”
+  if (
+    isSpanishPostalCode(ref) &&
+    (looksLikePlaceName(name) ||
+      nameClass?.role === "address" ||
+      (name && postalMatchesPlaceName(ref, name)))
+  ) {
+    return 0.1;
+  }
+  // Cualquier 5 dígitos + forma “Ciudad, País” (por si el prefijo no es ES)
   if (/^\d{5}$/.test(ref) && (looksLikePlaceName(name) || nameClass?.role === "address")) {
     return 0.1;
   }

@@ -6,6 +6,7 @@
 - `line-role`: product / phone / address / prose / meta por forma, no por frases de un albarán.
 - Solo entra al pedido si `productScore ≥ 0.65`; quality-gate y ClarivScan delegan ahí.
 - CP (5 dígitos) + “Ciudad, País” no pasa como SKU/nombre (dirección partida en columnas).
+- Catálogo `es-postal`: prefijos 01–52 → provincia/CCAA; si CP + nombre cuadran, se descarta (sin tumbar SKUs tipo 10031).
 
 ## 0.3.22 — 2026-10-09
 
