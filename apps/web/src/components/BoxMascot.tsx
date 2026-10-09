@@ -1,6 +1,6 @@
 /**
- * Mascota Clariv — caja isométrica tipo 📦 / foto logística.
- * Cinta: franja horizontal limpia en tapa + bajada por cara izquierda.
+ * Mascota Clariv — caja isométrica tipo 📦.
+ * Cinta solo en tapa + cara izquierda. Cara derecha = ojos (sin cinta).
  */
 export function BoxMascot({
   className = "",
@@ -54,12 +54,12 @@ export function BoxMascot({
     >
       <ellipse cx="70" cy="138" rx="48" ry="6" fill="#3b2314" fillOpacity="0.16" />
 
-      {/* Cuerpo — 3 caras planas (foto / Noto 📦) */}
+      {/* Top / Left / Right */}
       <path d="M20 48 L70 20 L120 48 L70 76 Z" fill="#e8c9a0" />
       <path d="M20 48 L20 98 L70 126 L70 76 Z" fill="#c9a06e" />
       <path d="M70 76 L70 126 L120 98 L120 48 Z" fill="#a67c4a" />
 
-      {/* Cinta tapa: banda izq→der centrada, alineada al diamante */}
+      {/* Cinta en TAPA (solo diamante superior) */}
       <path
         d="M31 43 L70 36 L109 43 L109 53 L70 46 L31 53 Z"
         fill="#dcc6a4"
@@ -70,19 +70,22 @@ export function BoxMascot({
         fillOpacity="0.5"
       />
 
-      {/* Cinta cara izq: bajada centrada (continuación del pliegue) */}
+      {/*
+        Cinta en CARA IZQUIERDA únicamente (x < 70).
+        Centrada en el paralelogramo izq: lerp 0.36–0.64 del borde superior/inferior.
+      */}
       <path
-        d="M54 66 L70 75 L86 66 L86 108 L70 117 L54 108 Z"
+        d="M38 58.1 L52 65.9 L52 115.9 L38 108.1 Z"
         fill="#dcc6a4"
       />
       <path
-        d="M56 68 L70 76 L84 68 L84 72 L70 80 L56 72 Z"
+        d="M39.5 59.5 L50.5 65.7 L50.5 69.5 L39.5 63.3 Z"
         fill="#ebe0cc"
         fillOpacity="0.4"
       />
 
-      {/* Iconos envío */}
-      <g transform="translate(26 102)" opacity="0.8">
+      {/* Iconos envío — cara izquierda */}
+      <g transform="translate(24 100)" opacity="0.8">
         <path d="M5 0 V7 M2.5 3.5 L5 0 L7.5 3.5" stroke="#5c5044" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M12 0 V7 M9.5 3.5 L12 0 L14.5 3.5" stroke="#5c5044" strokeWidth="1.35" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M1.5 9 H15.5" stroke="#5c5044" strokeWidth="1.25" strokeLinecap="round" />
@@ -90,7 +93,7 @@ export function BoxMascot({
         <path d="M23.5 2.5 L25.5 4.5" stroke="#5c5044" strokeWidth="1.1" strokeLinecap="round" />
       </g>
 
-      {/* Cara pet — panel derecho */}
+      {/* Ojos — solo cara derecha (sin cinta) */}
       <circle cx="80" cy="90" r="4.5" fill="#e08968" fillOpacity="0.45" />
       <circle cx="112" cy="90" r="4.5" fill="#e08968" fillOpacity="0.45" />
       {eyes}
