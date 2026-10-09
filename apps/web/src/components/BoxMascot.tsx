@@ -60,8 +60,16 @@ function ClippyEye({
         fill="#3b2314"
         fillOpacity="0.3"
       />
-      {/* Globo ovalado vertical */}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${id}-ball)`} />
+      {/* Globo ovalado — borde negro cartoon */}
+      <ellipse
+        cx={cx}
+        cy={cy}
+        rx={rx}
+        ry={ry}
+        fill={`url(#${id}-ball)`}
+        stroke="#1a120c"
+        strokeWidth="2.8"
+      />
       <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={`url(#${id}-shade)`} />
       {/* Brillos */}
       <ellipse
@@ -80,14 +88,21 @@ function ClippyEye({
         fill="#fff"
         fillOpacity="0.65"
       />
-      {/* Pupila */}
-      <circle cx={cx + pupilDx} cy={cy + pupilDy} r={pupilR} fill="#1a120c" />
+      {/* Pupila cartoon */}
+      <circle
+        cx={cx + pupilDx}
+        cy={cy + pupilDy}
+        r={pupilR}
+        fill="#1a120c"
+        stroke="#0a0705"
+        strokeWidth="1.2"
+      />
       <circle
         cx={cx + pupilDx + pupilR * 0.35}
         cy={cy + pupilDy - pupilR * 0.35}
         r={pupilR * 0.28}
         fill="#fff"
-        fillOpacity="0.55"
+        fillOpacity="0.85"
       />
     </g>
   );
@@ -154,7 +169,7 @@ export function BoxMascot({
 
       {/* Cejas encima de los óvalos */}
       {mood !== "wink" && (
-        <g stroke="#1a120c" strokeWidth="3" fill="none" strokeLinecap="round">
+        <g stroke="#1a120c" strokeWidth="3.4" fill="none" strokeLinecap="round">
           <path d={`M74 ${browY + 5} Q84 ${browY - 2} 92 ${browY + 3}`} />
           <path d={`M100 ${browY + 3} Q108 ${browY - 2} 118 ${browY + 5}`} />
         </g>
